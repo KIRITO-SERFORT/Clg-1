@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Clg 1% keeps the ERP login (encrypted with a device-bound Keystore key) and the student's attendance
+  records ON THIS DEVICE ONLY. Android's DataStore files are therefore excluded from backups.
+  Android 11 and older use this file (full-backup-content).
+-->
+<full-backup-content>
+    <exclude domain="file" path="datastore/" />
+    <exclude domain="sharedpref" path="clg1_academic_local.xml" />
+    <exclude domain="sharedpref" path="clg1_entitlements.xml" />
+    <exclude domain="database" path="clg1_academic.db" />
+    <exclude domain="database" path="clg1_academic.db-wal" />
+    <exclude domain="database" path="clg1_academic.db-shm" />
+</full-backup-content>

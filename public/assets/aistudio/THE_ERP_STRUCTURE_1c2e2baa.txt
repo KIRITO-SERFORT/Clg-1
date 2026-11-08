@@ -1,0 +1,247 @@
+## AI
+
+### Analyzing data
+
+**Data used:**
+````
+* Element's uid is 90.
+* Its selector is `.col-xs-12.col-sm-12.col-md-8.col-lg-9`
+* It only has 1 child element node: `input#password`
+* It doesn't have any child text nodes
+* It has a previous sibling and it is an element (uid=88) node
+* Its parent's selector is `.password-container.form-group` (uid=46)
+* Its parent is an element node
+* Its parent has 2 child element nodes: `.col-xs-12.col-sm-12.col-md-4.col-lg-3` (uid=88), `.col-xs-12.col-sm-12.col-md-8.col-lg-9` (uid=90)
+````
+
+### Getting full page HTML
+
+The user requested the full code of the page, so I need to retrieve the outerHTML of the document element.
+
+**Code executed:**
+```
+const data = {
+  html: document.documentElement.outerHTML
+};
+```
+
+**Data returned:**
+```
+{"html":"<html xmlns=\"http://www.w3.org/1999/xhtml\" class=\"\"><head><style>body {transition: opacity ease-in 0.2s; } \nbody[unresolved] {opacity: 0; display: block; overflow: hidden; position: relative; } \n</style>\n    <meta charset=\"utf-8\">\n    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">\n    <meta name=\"robots\" content=\"noindex, nofollow\">\n\n            <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n    <title>        Alagappa Chettiar Government College of Engineering &amp; Technology, Sivagangai\n</title> \n    <link rel=\"icon\" href=\"/resources/xhdjl/login/laudea-dote/img/favicon.ico\">\n            <link href=\"/resources/xhdjl/login/laudea-dote/css/login.css\" rel=\"stylesheet\">\n<div id=\"uuidMachine\">d49472a8-4448-402c-871e-d8ab5d58149d</div></head>\n\n<body class=\"\">\n    <div id=\"kc-logo\"><a href=\"#\"><div id=\"kc-logo-wrapper\"></div></a></div>\n\n    <div id=\"kc-container\" class=\"\">\n        <div id=\"kc-container-wrapper\" class=\"\">\n\n            <div id=\"kc-header\" class=\"col-xs-12 col-sm-8 col-md-8 col-lg-7\">\n                <div id=\"kc-header-wrapper\" class=\"\">\t    <div class=\"title\">\n            <div id=\"kc-logo\"><a href=\"#\"><img id=\"kc-logo-wrapper\" src=\"/resources/xhdjl/login/laudea-dote/img/dotelogo.png\" class=\"img-responsive center-block\" alt=\"fairlogin\"></a></div>\n        </div>\n        Alagappa Chettiar Government College of Engineering &amp; Technology, Sivagangai\n</div>\n            </div>\n\n\n            <div id=\"kc-content\" class=\"col-sm-12 col-md-12 col-lg-12 container\">\n                \n        <div id=\"kc-content-wrapper\" class=\"row\">\n\n                   \n\n                    <div class=\"container\">\n                        <div class=\"row h-100vh\">\n                            <div class=\"col align-self-center\">\n                            <div class=\"card login-card\">\n                                <div class=\"row mx-0\">\n\n                             <div class=\"col-md-6 py-3 py-md-5\" id=\"leftSec\">\n                                <div class=\"logo text-center\"> <img src=\"/resources/xhdjl/login/laudea-dote/img/dotelogo.png\" alt=\"Logo\"> </div>\n                                <h3 class=\"login-title text-center mt-3 mb-3 mb-md-5\">\t    <div class=\"title\">\n            <div id=\"kc-logo\"><a href=\"#\"><img id=\"kc-logo-wrapper\" src=\"/resources/xhdjl/login/laudea-dote/img/dotelogo.png\" class=\"img-responsive center-block\" alt=\"fairlogin\"></a></div>\n        </div>\n        Alagappa Chettiar Government College of Engineering &amp; Technology, Sivagangai\n</h3>\n                                  <div class=\"form-group\">\n                                    </div>\n                                    \n            <form id=\"kc-form-login\" class=\"form form-horizontal\" action=\"https://auth.tnedu.in/realms/accet/login-actions/authenticate?session_code=1AAE1gch-HhXp4olFaWYIvGeLnzjZQ-qGWLyYSSYOcs&amp;execution=3952d0d6-656f-4a5f-8417-fe41d6832479&amp;client_id=student&amp;tab_id=j6qDpvDpbAI\" method=\"post\">\n                <div class=\"username-container form-group\">\n                    <div class=\"col-xs-12 col-sm-12 col-md-4 col-lg-3\">\n                        <label for=\"username\" class=\"control-label\">Username</label>\n                    </div>\n\n                    <div class=\"col-xs-12 col-sm-12 col-md-8 col-lg-9\">\n                            <input id=\"username\" class=\"form-control form-control\" name=\"username\" value=\"\" type=\"text\" autofocus=\"\" autocomplete=\"off\">\n                    </div>\n                </div>\n                <div class=\"password-container form-group\">\n                    <div class=\"col-xs-12 col-sm-12 col-md-4 col-lg-3\">\n                        <label for=\"password\" class=\"control-label\">Password</label>\n                    </div>\n\n                    <div class=\"col-xs-12 col-sm-12 col-md-8 col-lg-9\">\n                        <input id=\"password\" class=\"form-control form-control\" name=\"password\" type=\"password\" autocomplete=\"off\">\n                    </div>  \n                </div>\n                <div class=\"form-group row\">\n                    <div id=\"kc-form-options\" class=\"col-xs-4 col-sm-5 col-md-offset-4 col-md-4 col-lg-offset-3 col-lg-5\">\n                        <div class=\"col-xs-12\" style=\"width:100%; margin-bottom:15px\">\n                         \n                                <div class=\"checkbox remember-me-checkbox\">\n                                    <label>\n                                            <input id=\"rememberMe\" name=\"rememberMe\" type=\"checkbox\" tabindex=\"3\">&nbsp;&nbsp;Remember me\n                                    </label>\n                                </div>\n                            <div class=\"forgot-password-wrapper\">\n                            <div class=\"\" style=\"width:100%\">\n                                    <span><a href=\"/realms/accet/login-actions/reset-credentials?client_id=student&amp;tab_id=j6qDpvDpbAI\">Forgot Password?</a></span>\n                            </div>\n                        </div>\n                        </div>\n                        <div id=\"kc-form-buttons\" class=\"col-xs-12\" style=\"width:100%\">\n                            <div class=\"\" style=\"width:100%\">\n                                <input class=\"btn btn-primary btn-flat btn-block btn btn-primary btn-lg\" name=\"login\" id=\"kc-login\" type=\"submit\" value=\"Log in\">\n                            </div>\n                            <div class=\"clearfix\"></div>\n                        </div> \n                    </div>\n                        <div>\n                        </div>\n                </div>\n            </form>\n\n                                    <div class=\"footer-msg\">\n                                    </div>\n                            </div>\n                       \n                            <div class=\"col-md-6 pt-1 pb-4 py-md-5 right-sec\" id=\"rightSec\">\n                                <div class=\"login-card-layout carousel slide\" id=\"carouselSlide\" data-ride=\"carousel\" data-interval=\"10000\">  \n                                    <div class=\"carousel-inner\">\n                                        <div class=\"carousel-item active\" style=\"margin-top:20px\">\n                                            <div class=\"main-logo\"><a href=\"http://www.laudea.in/\"><img src=\"/resources/xhdjl/login/laudea-dote/img/tnelogo.png\" alt=\"Logo\"></a></div>\n                                            <div class=\"tamil-word\">\n                                                <div style=\"width: 225px\">\n                                                    கற்க கசடறக் கற்பவை கற்றபின் <br>\n                                                    நிற்க அதற்குத் தக.\n                                                </div>\n                                            </div>\n                                            <div class=\"tamil-word-1\">\n                                                <div style=\"width: 225px\">\n                                                    குறள் 391\n                                                </div>\n                                            </div>\n                                            <div class=\"card-footer-section\" style=\"margin-top: 40px;\">\n                                                    <p style=\"text-align: center; color: #616161; font-size: 12px; margin-bottom:7px\">\n                                                       Copyright ©  <a href=\"https://dte.tn.gov.in\" target=\"_blank\">DoTE Government of Tamil Nadu</a>  \n                                                    </p>\n                                                     <p class=\"font-11px\" style=\"text-align: center; color: #617261; margin-top:0\">\n                                                        <a href=\"https://dote.tnedu.in/privacy-policy  \" target=\"_blank\">Privacy Policy</a> | \n                                                        <a href=\"https://dote.tnedu.in/terms-and-conditions\" target=\"_blank\">Terms &amp; Conditions</a>\n                                                    </p>\n                                            </div>\n                                    </div>\n                                    <div class=\"text-center psgst-text\">\n                                        Powered by &nbsp;  \n                                        <img style=\"width: 32px; vertical-align: middle;\" src=\"/resources/xhdjl/login/laudea-dote/img/psglogodiamond.png\" alt=\"PSG\">\n                                            PSG Software Technologies     \n                                    </div>\n                                </div>\n                            </div>\n\n\n                            </div>\n                            </div>\n                            </div>\n                            </div>\n                        </div>\n\n                </div>\n            </div></div>\n    </div>\n\n\n</div></body></html>"}
+```
+
+### Answer
+
+Here is the complete HTML code for the page you are inspecting:
+
+
+`````html
+<html xmlns="http://www.w3.org/1999/xhtml" class="">
+<head>
+    <style>
+        body { transition: opacity ease-in 0.2s; } 
+        body[unresolved] { opacity: 0; display: block; overflow: hidden; position: relative; } 
+    </style>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Alagappa Chettiar Government College of Engineering &amp; Technology, Sivagangai</title> 
+    <link rel="icon" href="/resources/xhdjl/login/laudea-dote/img/favicon.ico">
+    <link href="/resources/xhdjl/login/laudea-dote/css/login.css" rel="stylesheet">
+    <div id="uuidMachine">d49472a8-4448-402c-871e-d8ab5d58149d</div>
+</head>
+
+<body class="">
+    <div id="kc-logo"><a href="#"><div id="kc-logo-wrapper"></div></a></div>
+
+    <div id="kc-container" class="">
+        <div id="kc-container-wrapper" class="">
+            <div id="kc-header" class="col-xs-12 col-sm-8 col-md-8 col-lg-7">
+                <div id="kc-header-wrapper" class="">
+                    <div class="title">
+                        <div id="kc-logo">
+                            <a href="#">
+                                <img id="kc-logo-wrapper" src="/resources/xhdjl/login/laudea-dote/img/dotelogo.png" class="img-responsive center-block" alt="fairlogin">
+                            </a>
+                        </div>
+                    </div>
+                    Alagappa Chettiar Government College of Engineering &amp; Technology, Sivagangai
+                </div>
+            </div>
+
+            <div id="kc-content" class="col-sm-12 col-md-12 col-lg-12 container">
+                <div id="kc-content-wrapper" class="row">
+                    <div class="container">
+                        <div class="row h-100vh">
+                            <div class="col align-self-center">
+                                <div class="card login-card">
+                                    <div class="row mx-0">
+                                        <div class="col-md-6 py-3 py-md-5" id="leftSec">
+                                            <div class="logo text-center"> 
+                                                <img src="/resources/xhdjl/login/laudea-dote/img/dotelogo.png" alt="Logo"> 
+                                            </div>
+                                            <h3 class="login-title text-center mt-3 mb-3 mb-md-5">
+                                                <div class="title">
+                                                    <div id="kc-logo">
+                                                        <a href="#">
+                                                            <img id="kc-logo-wrapper" src="/resources/xhdjl/login/laudea-dote/img/dotelogo.png" class="img-responsive center-block" alt="fairlogin">
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                                Alagappa Chettiar Government College of Engineering &amp; Technology, Sivagangai
+                                            </h3>
+                                            
+                                            <form id="kc-form-login" class="form form-horizontal" action="..." method="post">
+                                                <div class="username-container form-group">
+                                                    <div class="col-xs-12 col-sm-12 col-md-4 col-lg-3">
+                                                        <label for="username" class="control-label">Username</label>
+                                                    </div>
+                                                    <div class="col-xs-12 col-sm-12 col-md-8 col-lg-9">
+                                                        <input id="username" class="form-control" name="username" type="text" autofocus="" autocomplete="off">
+                                                    </div>
+                                                </div>
+                                                <div class="password-container form-group">
+                                                    <div class="col-xs-12 col-sm-12 col-md-4 col-lg-3">
+                                                        <label for="password" class="control-label">Password</label>
+                                                    </div>
+                                                    <!-- Your Selected Element (uid: 90) -->
+                                                    <div class="col-xs-12 col-sm-12 col-md-8 col-lg-9">
+                                                        <input id="password" class="form-control" name="password" type="password" autocomplete="off">
+                                                    </div>  
+                                                </div>
+                                                <div class="form-group row">
+                                                    <div id="kc-form-options" class="col-xs-4 col-sm-5 col-md-offset-4 col-md-4 col-lg-offset-3 col-lg-5">
+                                                        <div class="checkbox remember-me-checkbox">
+                                                            <label><input id="rememberMe" name="rememberMe" type="checkbox">&nbsp;&nbsp;Remember me</label>
+                                                        </div>
+                                                        <div class="forgot-password-wrapper">
+                                                            <a href="...">Forgot Password?</a>
+                                                        </div>
+                                                        <div id="kc-form-buttons">
+                                                            <input class="btn btn-primary btn-block" name="login" id="kc-login" type="submit" value="Log in">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </form>
+                                        </div>
+
+                                        <div class="col-md-6 pt-1 pb-4 py-md-5 right-sec" id="rightSec">
+                                            <div class="login-card-layout carousel slide">
+                                                <div class="carousel-inner">
+                                                    <div class="carousel-item active">
+                                                        <div class="main-logo"><img src="/resources/xhdjl/login/laudea-dote/img/tnelogo.png" alt="Logo"></div>
+                                                        <div class="tamil-word">கற்க கசடறக் கற்பவை கற்றபின்...</div>
+                                                        <div class="card-footer-section">
+                                                            <p>Copyright © DoTE Government of Tamil Nadu</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="text-center psgst-text">
+                                                    Powered by PSG Software Technologies
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+`````
+
+
+The code consists of a standard Bootstrap-based login page layout. Your selected element (uid 90) is the wrapper for the password input field, utilizing Bootstrap grid classes (`col-md-8 col-lg-9`) to position the input next to its label.
+
+username block:
+
+<div class="username-container form-group">
+    <div class="col-xs-12 col-sm-12 col-md-4 col-lg-3">
+        <label for="username" class="control-label">Username</label>
+    </div>
+
+    <div class="col-xs-12 col-sm-12 col-md-8 col-lg-9">
+        <input id="username" class="form-control form-control" name="username" value="" type="text" autofocus="" autocomplete="off">
+    </div>
+</div>
+
+password block:
+
+<div class="password-container form-group">
+    <div class="col-xs-12 col-sm-12 col-md-4 col-lg-3">
+        <label for="password" class="control-label">Password</label>
+    </div>
+
+    <div class="col-xs-12 col-sm-12 col-md-8 col-lg-9">
+        <input id="password" class="form-control form-control" name="password" type="password" autocomplete="off">
+    </div>  
+</div>
+
+
+the students attendance details:
+
+<div class="col-md-5">
+                                                        <div class="p-3 box-title d-flex justify-content-between cursor-pointer" ng-click="openPresentDates()">
+                                                            <div class="text-theme5 absent-title" data-toggle="popover" data-placement="top" data-trigger="hover" data-content="Click To See Detailed Version" data-original-title="" title="">Hours
+                                                                Present
+                                                                without Exemption</div>
+                                                            <div class="text-theme5 lead ng-binding">
+                                                                150
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="p-3 box-title d-flex justify-content-between cursor-pointer">
+                                                            <div class="text-theme5">Hours Present with Exemption</div>
+                                                            <div class="text-theme5 lead ng-binding">
+                                                                150
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="p-3 box-title d-flex justify-content-between cursor-pointer" ng-click="openAbsentDates()">
+                                                            <div class="text-danger absent-title" data-toggle="popover" data-placement="top" data-trigger="hover" data-content="Click To See Detailed Version" data-original-title="" title="">Hours
+                                                                Absent
+                                                            </div>
+                                                            <div class="text-danger lead ng-binding">
+                                                                13
+                                                            </div>
+                                                        </div>
+                                                        <div class="p-3 box-title d-flex justify-content-between">
+                                                            <div class="text-secondery">Total hours marked</div>
+                                                            <div class="text-secondery lead ng-binding">
+                                                                163
+                                                            </div>
+                                                        </div>
+                                                        <div class="p-3 box-title d-flex justify-content-between">
+                                                            <div class="text-secondery">Total hours not marked</div>
+                                                            <div class="text-secondery lead ng-binding">
+                                                                127
+                                                            </div>
+                                                        </div>
+                                                        <div class="p-3 box-title d-flex justify-content-between">
+                                                            <div class="text-primary ng-binding">Total Working Hours Till 06-11-2026</div>
+                                                            <div class="text-primary lead ng-binding">
+                                                                290
+                                                            </div>
+                                                        </div>
+                                                        <div class="p-3 box-title d-flex justify-content-between">
+                                                            <div class="text-secondery">Present Percentage without
+                                                                Exemption
+                                                            </div>
+                                                            <div class="text-secondery lead ng-binding">
+                                                                92%
+                                                            </div>
+                                                        </div>
+                                                        <div class="p-3 box-title d-flex justify-content-between">
+                                                            <div class="text-secondery">Present Percentage with
+                                                                Exemption
+                                                            </div>
+                                                            <div class="text-secondery lead ng-binding">
+                                                                92%
+                                                            </div>
+                                                        </div>
+                                                    </div>

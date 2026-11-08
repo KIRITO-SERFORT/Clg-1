@@ -1,0 +1,6 @@
+{
+  "name": "ACGCET Widtz",
+  "description": "Attendance tracker and home screen widget for ACGCET students with Keycloak ERP sync, safe bunk calculator, and recovery hours analysis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

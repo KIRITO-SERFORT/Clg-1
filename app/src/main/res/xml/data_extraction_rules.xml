@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ backup rules: see backup_rules.xml for the reasoning. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="datastore/" />
+        <exclude domain="sharedpref" path="clg1_academic_local.xml" />
+        <exclude domain="sharedpref" path="clg1_entitlements.xml" />
+        <exclude domain="database" path="clg1_academic.db" />
+        <exclude domain="database" path="clg1_academic.db-wal" />
+        <exclude domain="database" path="clg1_academic.db-shm" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="datastore/" />
+        <exclude domain="sharedpref" path="clg1_academic_local.xml" />
+        <exclude domain="sharedpref" path="clg1_entitlements.xml" />
+        <exclude domain="database" path="clg1_academic.db" />
+        <exclude domain="database" path="clg1_academic.db-wal" />
+        <exclude domain="database" path="clg1_academic.db-shm" />
+    </device-transfer>
+</data-extraction-rules>
