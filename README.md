@@ -1,48 +1,54 @@
 # Clg 1%
 
-Clg 1% is an Android app built with Kotlin and Jetpack Compose. The supplied Phase 1 project has been extended with a local academic command center while retaining the original ERP/attendance features.
+![Build Clg 1% debug APK](https://github.com/KIRITO-SERFORT/Clg-1/actions/workflows/build-apk.yml/badge.svg)
 
-## Main functionality
+Android academic companion for college students — ERP attendance, timetable and widgets plus a local-first academic workspace (marks, SGPA/CGPA, exams, templates, backup, DataVis export). Formerly "ACGCET WIDTZ"; an independent student project, not IKEGAI TELOS.
 
-- ACGCET ERP login, attendance, timetable, widgets and background sync from Phase 1.
-- Academic setup wizard with local draft/resume, multiple academic periods, assessment components, grading rules and sample calculation.
-- Per-subject marks and assessment components, missing/absent/exempt status, weighted calculations, grade points/SGPA, target marks and what-if analysis.
-- Exam calendar with date/time and opt-in reminders.
-- Structure-only `.clg1template` import/export, QR generation and camera scanning.
-- Historical term snapshots, term-trend chart, historical grade/category analytics, multi-page PDF reports and encrypted academic backup/restore.
-- Room database schema v3 with non-destructive migrations and legacy preference recovery copy.
-- Google Play subscription client and secure server-verification source.
-- One-time DataVis CSV transfer backend source with manual CSV sharing fallback.
+> Status: source complete, CI build in progress. No code changes in this pass — this update refreshes the repo presentation (README/About) only. A debug APK will be published here only after the GitHub Actions build is green.
 
-## Build a debug APK on GitHub
+## What the app does
 
-1. Push this project to a GitHub repository using the `main` or `master` branch.
-2. Open **Actions → Build Clg 1% debug APK → Run workflow** (or push a commit).
-3. Wait for `testDebugUnitTest`, `connectedDebugAndroidTest` (API 35 emulator UI/device suite) and `assembleDebug` to finish.
-4. Download the `clg1-debug-apk` artifact, or download the APK from the generated GitHub Release.
+- **ERP attendance (ACGCET only):** login, overall + subject-wise attendance, safe-to-miss / recover-hours maths, timetable with day-order + fix-day-order, background sync, shortage notifications, full/compact/Royal Mini widgets.
+- **Academic workspace (all colleges, offline):** setup wizard with draft/resume, multiple periods, assessment components (tests, assignments, quizzes, labs, practicals, viva, projects, end-sem), weighted/normalized combination rules, attendance-slab marks or eligibility-only, grade bands + grade points, SGPA/CGPA, provisional vs final results with plain-language calculation paths.
+- **Exam Command Center:** exam calendar + countdown, opt-in WorkManager reminders (rescheduled on reboot), what-if / "what do I need?" target solver that never overwrites real marks, CSV import preview, shareable report, delete-my-data.
+- **Templates:** structure-only `.clg1template` (JSON) export/import via system share sheet or QR, strict schema + checksum validation, "community — not institutionally verified" preview, merge adds subjects without touching marks or ERP secrets.
+- **Data & privacy:** academic records stay on-device (Room + legacy SharedPreferences mirror); passphrase-encrypted backup/restore; CSV/DataVis export only after explicit user review; no cloud sync; ERP password stays in Android Keystore.
+- **Freemium:** basic marks, calculations and records are free. Advanced analytics/PDF/history are gated by verified Play Billing (server-verified); a local toggle never unlocks them. "Buy me a tea" (UPI) is a donation, never proof of purchase.
 
-The workflow uses JDK 21 and Gradle 9.3.1 and creates a temporary debug keystore. It does not create a Play Store release-signed APK. Do not use the generated debug APK for public production distribution.
+## College support
 
-## Optional production integrations
+- Attendance sync works with the **ACGCET ERP only**. Other colleges can be added later through `ErpConnector`; the academic workspace (setup, marks, SGPA/CGPA, exams, templates) already works for any college without ERP login.
 
-### Billing
+## Build a debug APK (GitHub Actions is the supported path)
 
-See `docs/GOOGLE_PLAY_BILLING_SETUP.md` and `backend/google-play-verifier/`. Configure `CLG1_PLUS_PRODUCT_ID` as a GitHub repository variable and `CLG1_BILLING_VERIFY_URL` as a GitHub secret. Deploy the verifier with a service account JSON stored only as a hosting secret. Until these values are configured and the product is available in Play Console, the purchase button remains disabled and premium is not granted.
+1. Open **Actions → Build Clg 1% debug APK → Run workflow** (or push to `main`).
+2. Wait for `testDebugUnitTest`, `connectedDebugAndroidTest` (API 35 emulator UI/device suite) and `assembleDebug`.
+3. Download the `clg1-debug-apk` artifact, or the APK attached to the auto-generated GitHub Release. Do not distribute a debug APK as production.
 
-### DataVis
+Local build needs Android Studio + SDK 36 ext 1, JDK 21, Gradle 9.3.1: run `gradle testDebugUnitTest`, then `gradle assembleDebug` (Windows: `scripts/build-debug.ps1`, macOS/Linux: `scripts/build-debug.sh`). Output: `app/build/outputs/apk/debug/app-debug.apk`.
 
-See `docs/DATAVIS_TRANSFER_SETUP.md` and `datavis-transfer/`. Deploy the Cloudflare Worker, then set `CLG1_DATAVIS_TRANSFER_API` as a GitHub repository variable. The DataVis app's source repository was not part of this ZIP, so merge `datavis-transfer/datavis-integration/streamlit_import.py` into the DataVis Streamlit app and configure `CLG1_TRANSFER_API_BASE` there. Manual CSV sharing remains available without this backend.
+## Privacy & safety
 
-## Local build
+- ERP password: Android Keystore-encrypted, on-device, excluded from backups. Academic records, CSVs and templates never include name, roll number, ERP credentials, tokens or device IDs unless the student types them into free-text fields.
+- Do not hard-code your college's official rules from the in-app examples: verify grading, pass and credit rules with your institution before relying on any GPA/result.
 
-Requirements: Android Studio with Android SDK 36 extension 1, JDK 21 and Gradle 9.3.1. From the project root run `gradle testDebugUnitTest` and `gradle assembleDebug`. On Windows use `scripts/build-debug.ps1`; on macOS/Linux use `scripts/build-debug.sh`. The app module output is `app/build/outputs/apk/debug/app-debug.apk`.
+## Docs (start here)
 
-## Privacy and data
+- `docs/PHASE0_AUDIT.md` — repo audit, stack, risks.
+- `docs/PHASE1_CHANGES.md` — preserve + rebrand notes, regression checklist.
+- `docs/IMPLEMENTATION_STATUS.md` — phase-by-phase status with evidence (read this before claiming "done").
+- `docs/ANDROID_REGRESSION_CHECKLIST.md` — automated + manual device checks.
+- `docs/ACADEMIC_DATA_SCHEMA.md` — local models + template/CSV schemas.
+- `docs/DATAVIS_CSV_SCHEMA.md` + `docs/DATAVIS_TRANSFER_SETUP.md` — DataVis manual + one-time transfer setup.
+- `docs/GOOGLE_PLAY_BILLING_SETUP.md` + `backend/google-play-verifier/` — billing setup.
+- `docs/LOCAL_VERIFICATION_LOG.md` — checks actually run vs not run.
+- `docs/ACADEMIC_SETUP_QR_HISTORY_ROOM.md` — QR/template/history/Room notes.
 
-Academic workspace data is local-only and mirrored into Room. Templates contain academic structure only. CSV sharing and DataVis transfer require explicit user action. Encrypted backup is passphrase protected and includes local academic history. ERP credentials remain in the existing Android Keystore-backed storage and are not included in academic templates, CSV exports or academic backups.
+## Production integrations (optional, owner-configured)
 
-## Current verification limits
+- **Billing:** set `CLG1_PLUS_PRODUCT_ID` (repo variable) + `CLG1_BILLING_VERIFY_URL` (secret), deploy the verifier; purchase stays disabled until configured. No client-side boolean unlocks premium.
+- **DataVis:** deploy the Cloudflare Worker, set `CLG1_DATAVIS_TRANSFER_API`, merge `datavis-transfer/datavis-integration/streamlit_import.py` into the DataVis app; manual CSV sharing works without it.
 
-The source ZIP has been structurally checked and pure Kotlin academic logic has been compiled/tested. The current environment lacked Android SDK/Gradle and network access, so a complete Android Gradle build, device run, camera test, Play Billing test and deployed DataVis end-to-end test could not be performed. The Android UI/device regression phase is intentionally not marked complete. Run the GitHub Actions workflow and resolve all reported errors before release.
+## Release honesty
 
-See `docs/IMPLEMENTATION_STATUS.md` for the phase-by-phase status, `docs/ANDROID_REGRESSION_CHECKLIST.md` for automated and manual device checks, and `docs/LOCAL_VERIFICATION_LOG.md` for checks actually run.
+- A release is "ready" only when Actions is green (unit + device tests + `assembleDebug`), an upgrade-over-install regression passes, and the APK installs and opens offline. Until then this repo is source-complete, not release-certified.
