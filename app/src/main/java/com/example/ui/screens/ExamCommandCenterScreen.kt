@@ -23,7 +23,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,11 +39,27 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Insights
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import com.example.data.template.TemplateLibrary
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.Composable
 import androidx.core.content.ContextCompat
@@ -166,6 +186,15 @@ fun ExamCommandCenterScreen() {
     var pendingCsvRowCount by remember { mutableStateOf(0) }
     var isTransferringCsv by remember { mutableStateOf(false) }
     var pendingTemplate by remember { mutableStateOf<CollegeTemplate?>(null) }
+    var showCommunityTemplatesDialog by remember { mutableStateOf(false) }
+    var showSaveTemplateDialog by remember { mutableStateOf(false) }
+    var showPasteTemplateDialog by remember { mutableStateOf(false) }
+    var pasteTemplateText by remember { mutableStateOf("") }
+    var saveTemplateTitle by remember { mutableStateOf("") }
+    var localTemplates by remember { mutableStateOf(TemplateLibrary.getSavedLocalTemplates(context)) }
+    var showExportCsvSuccessDialog by remember { mutableStateOf(false) }
+    var exportedCsvString by remember { mutableStateOf("") }
+    val clipboardManager = LocalClipboardManager.current
     var showTemplateReplaceConfirm by remember { mutableStateOf(false) }
     var pendingCsv by remember { mutableStateOf<String?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -412,30 +441,80 @@ fun ExamCommandCenterScreen() {
             }
         }
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { showSetupWizard = true }, modifier = Modifier.weight(1f)) { Text("Setup wizard") }
-                OutlinedButton(onClick = {
-                    runCatching {
-                        val template = AcademicTemplateCodec.export(college, program, department, regulation, academicYear, term, rules, subjects)
-                        val payload = AcademicQrCodec.encode(template)
-                        qrBitmap = AcademicQrCodec.generateBitmap(payload)
-                    }.onFailure { message = it.message ?: "Could not generate QR" }
-                }, modifier = Modifier.weight(1f)) { Text("Generate QR") }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = {
-                    val activity = context as? Activity
-                    if (activity == null) message = "QR scanner is unavailable in this context."
-                    else {
-                        val intent = IntentIntegrator(activity).setDesiredBarcodeFormats(IntentIntegrator.QR_CODE).setPrompt("Scan a Clg 1% academic template").setBeepEnabled(false).createScanIntent()
-                        qrScanLauncher.launch(intent)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Primary action: Browse & access templates
+                FilledTonalButton(
+                    onClick = { showCommunityTemplatesDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Browse Community Templates (Access Others' Templates)", fontWeight = FontWeight.SemiBold)
+                }
+
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { showSetupWizard = true }, modifier = Modifier.weight(1f)) {
+                        Text("Setup wizard")
                     }
-                }, modifier = Modifier.weight(1f)) { Text("Scan QR") }
-                OutlinedButton(onClick = {
-                    val template = AcademicTemplateCodec.export(college, program, department, regulation, academicYear, term, rules, subjects)
-                    runCatching { AcademicFileSharing.shareTextFile(context, "clg1-college-template.clg1template", "application/octet-stream", template, "Share academic template") }
-                        .onFailure { message = "Template export failed: ${it.message}" }
-                }, modifier = Modifier.weight(1f)) { Text("Share template") }
+                    OutlinedButton(
+                        onClick = {
+                            saveTemplateTitle = "$college $term".trim()
+                            showSaveTemplateDialog = true
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.BookmarkAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Save locally")
+                    }
+                }
+
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            runCatching {
+                                val template = AcademicTemplateCodec.export(college, program, department, regulation, academicYear, term, rules, subjects)
+                                AcademicFileSharing.shareTextFile(context, "clg1-college-template.clg1template", "application/json", template, "Share grading template with classmates")
+                            }.onFailure { message = "Template export failed: ${it.message}" }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Share template")
+                    }
+
+                    OutlinedButton(
+                        onClick = { showPasteTemplateDialog = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Import text")
+                    }
+                }
+
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = {
+                        val activity = context as? Activity
+                        if (activity == null) message = "QR scanner is unavailable in this context."
+                        else {
+                            val intent = IntentIntegrator(activity).setDesiredBarcodeFormats(IntentIntegrator.QR_CODE).setPrompt("Scan a Clg 1% academic template").setBeepEnabled(false).createScanIntent()
+                            qrScanLauncher.launch(intent)
+                        }
+                    }, modifier = Modifier.weight(1f)) {
+                        Text("Scan QR")
+                    }
+                    OutlinedButton(onClick = {
+                        runCatching {
+                            val template = AcademicTemplateCodec.export(college, program, department, regulation, academicYear, term, rules, subjects)
+                            val payload = AcademicQrCodec.encode(template)
+                            qrBitmap = AcademicQrCodec.generateBitmap(payload)
+                        }.onFailure { message = it.message ?: "Could not generate QR" }
+                    }, modifier = Modifier.weight(1f)) {
+                        Text("Generate QR")
+                    }
+                }
             }
         }
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = { showSubjectDialog = true }, modifier = Modifier.weight(1f)) { Text("Add subject") }; OutlinedButton(onClick = { showExamDialog = true }, modifier = Modifier.weight(1f)) { Text("Add exam") } } }
@@ -586,48 +665,114 @@ fun ExamCommandCenterScreen() {
             Card { Column(Modifier.padding(14.dp)) { Text(exam.title, fontWeight = FontWeight.SemiBold); Text("${exam.subject} · ${SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()).format(Date(exam.dateMillis))}"); Text(if (days >= 0) "$days days remaining" else "${-days} days ago"); if (exam.notes.isNotBlank()) Text(exam.notes, style = MaterialTheme.typography.bodySmall); TextButton(onClick = { exams.remove(exam); WorkManager.getInstance(context).cancelUniqueWork(examWorkName(exam)); save() }) { Text("Remove") } } }
         }
         item {
-            Divider()
-            Text("Sharing & export", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("Templates contain structure only. CSV export includes this term's assessment marks; review the preview and confirm before sharing to another app.", style = MaterialTheme.typography.bodySmall)
-            OutlinedButton(onClick = {
-                runCatching {
-                    val template = AcademicTemplateCodec.export(
-                        college = college, program = program, department = department, regulation = regulation, academicYear = academicYear,
-                        term = term, rules = rules, subjects = subjects.toList(), includeSubjectStructure = true
+            HorizontalDivider(Modifier.padding(vertical = 12.dp))
+            Text("DataVis Analytics & Academic Export", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Export your academic dataset to a standardized CSV format, then use DataVis on Streamlit for deep cohort analysis and performance projections.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            Spacer(Modifier.height(8.dp))
+
+            // Prominent DataVis Action Card
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Insights, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("DataVis Web App Integration", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
+                    Text(
+                        "1. Tap 'Export Academic Data' to save or share your academic CSV.\n2. Tap 'Open DataVis' to open https://datavis-v5.streamlit.app/ and upload your CSV for interactive grade distributions and trend analysis.",
+                        style = MaterialTheme.typography.bodySmall
                     )
-                    AcademicFileSharing.shareTextFile(context, "clg1-college-template.clg1template", "application/json", template, "Share college template")
-                }.onFailure { message = "Template export failed: ${it.message}" }
-            }, modifier = Modifier.fillMaxWidth()) { Text("Export grading template (.clg1template)") }
-            OutlinedButton(onClick = { templateImportLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) }, modifier = Modifier.fillMaxWidth()) { Text("Import college template") }
-            OutlinedButton(onClick = {
-                val selectedSubjects = subjects.filter { selectedExportIds[it.id] ?: true }
-                if (selectedSubjects.isEmpty()) message = "Select at least one subject for DataVis export."
-                else {
-                    val activeTermId = runCatching {
-                        val periodArray = JSONObject(prefs.getString("academic_profile_v1", "{}") ?: "{}").optJSONArray("periods")
-                        (0 until (periodArray?.length() ?: 0)).map { periodArray!!.getJSONObject(it) }
-                            .firstOrNull { it.optString("name") == term }?.optString("id")
-                    }.getOrNull().orEmpty().ifBlank { "term-${term.trim().lowercase().replace(Regex("\\s+"), "-")}" }
-                    val csv = buildString {
-                        appendLine("schema_version,record_type,academic_year,term_id,term_name,subject_code,subject_name,credits,component_type,component_name,attempt_number,marks_obtained,marks_max,weight_percent,normalized_score,result_status,letter_grade,grade_point,attendance_percent,attendance_present,attendance_total,data_source,record_date")
-                        selectedSubjects.forEach { subject ->
-                            val result = AcademicRulesEngine.calculate(subject, rules)
-                            subject.assessments.forEach { mark ->
-                                val normalized = mark.obtained?.takeIf { mark.maximum > 0.0 }?.let { it / mark.maximum * 100.0 } ?: ""
-                                val recordDate = mark.dateEpochMillis?.let { SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.ROOT).format(Date(it)) }.orEmpty()
-                                appendLine("1,assessment,\"${academicYear.csv()}\",\"${activeTermId.csv()}\",\"${term.csv()}\",\"${subject.code.csv()}\",\"${subject.name.csv()}\",${subject.credits},\"${mark.category.csv()}\",\"${mark.name.csv()}\",1,${mark.obtained ?: ""},${mark.maximum},${mark.weightPercent},$normalized,${mark.status.name},\"${(result.grade ?: "").csv()}\",${result.gradePoint ?: ""},,,,manual,\"${recordDate.csv()}\"")
-                            }
+
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                val selectedSubjects = if (subjects.any { selectedExportIds[it.id] == true }) subjects.filter { selectedExportIds[it.id] ?: true } else subjects
+                                val activeTermId = runCatching {
+                                    val periodArray = JSONObject(prefs.getString("academic_profile_v1", "{}") ?: "{}").optJSONArray("periods")
+                                    (0 until (periodArray?.length() ?: 0)).map { periodArray!!.getJSONObject(it) }
+                                        .firstOrNull { it.optString("name") == term }?.optString("id")
+                                }.getOrNull().orEmpty().ifBlank { "term-${term.trim().lowercase().replace(Regex("\\s+"), "-")}" }
+
+                                val csv = buildString {
+                                    appendLine("schema_version,record_type,academic_year,term_id,term_name,subject_code,subject_name,credits,component_type,component_name,attempt_number,marks_obtained,marks_max,weight_percent,normalized_score,result_status,letter_grade,grade_point,attendance_percent,attendance_present,attendance_total,data_source,record_date")
+                                    selectedSubjects.forEach { subject ->
+                                        val result = AcademicRulesEngine.calculate(subject, rules)
+                                        subject.assessments.forEach { mark ->
+                                            val normalized = mark.obtained?.takeIf { mark.maximum > 0.0 }?.let { it / mark.maximum * 100.0 } ?: ""
+                                            val recordDate = mark.dateEpochMillis?.let { SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.ROOT).format(Date(it)) }.orEmpty()
+                                            appendLine("1,assessment,\"${academicYear.csv()}\",\"${activeTermId.csv()}\",\"${term.csv()}\",\"${subject.code.csv()}\",\"${subject.name.csv()}\",${subject.credits},\"${mark.category.csv()}\",\"${mark.name.csv()}\",1,${mark.obtained ?: ""},${mark.maximum},${mark.weightPercent},$normalized,${mark.status.name},\"${(result.grade ?: "").csv()}\",${result.gradePoint ?: ""},,,,manual,\"${recordDate.csv()}\"")
+                                        }
+                                    }
+                                }
+
+                                exportedCsvString = csv
+                                val safeTermName = term.trim().lowercase().replace(Regex("[^a-zA-Z0-9]"), "_").ifBlank { "term" }
+                                val fileName = "academic_data_${safeTermName}.csv"
+                                runCatching {
+                                    AcademicFileSharing.shareTextFile(context, fileName, "text/csv", csv, "Export Academic CSV for DataVis")
+                                }.onFailure { message = "Export sharing failed: ${it.message}" }
+                                showExportCsvSuccessDialog = true
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Export CSV")
+                        }
+
+                        FilledTonalButton(
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://datavis-v5.streamlit.app/")))
+                                }.onFailure { message = "Could not open DataVis: ${it.message}" }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Open DataVis")
                         }
                     }
-                    pendingCsvSubjectCount = selectedSubjects.size
-                    pendingCsvRowCount = selectedSubjects.sumOf { it.assessments.size }
-                    pendingCsv = csv
                 }
-            }, modifier = Modifier.fillMaxWidth()) { Text("Analyze selected data in DataVis") }
-            OutlinedButton(onClick = { backupMode = "export"; backupPassphrase = ""; showBackupPassphraseDialog = true }, modifier = Modifier.fillMaxWidth()) { Text("Create encrypted academic backup") }
-            OutlinedButton(onClick = { openBackupLauncher.launch(arrayOf("application/octet-stream", "application/x-clg1backup", "*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("Restore encrypted academic backup") }
-            OutlinedButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.fillMaxWidth()) { Text("Delete my academic data") }
-            OutlinedButton(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://datavis-v5.streamlit.app/"))) }.onFailure { message = "Could not open DataVis: ${it.message}" } }, modifier = Modifier.fillMaxWidth()) { Text("Open DataVis (upload CSV manually)") }
+            }
+
+            Spacer(Modifier.height(12.dp))
+            Text("Grading Templates & Backups", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            OutlinedButton(
+                onClick = {
+                    runCatching {
+                        val template = AcademicTemplateCodec.export(
+                            college = college, program = program, department = department, regulation = regulation, academicYear = academicYear,
+                            term = term, rules = rules, subjects = subjects.toList(), includeSubjectStructure = true
+                        )
+                        AcademicFileSharing.shareTextFile(context, "clg1-college-template.clg1template", "application/json", template, "Share college template")
+                    }.onFailure { message = "Template export failed: ${it.message}" }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Export grading template (.clg1template)")
+            }
+            OutlinedButton(onClick = { templateImportLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Import template file from device")
+            }
+            OutlinedButton(onClick = { backupMode = "export"; backupPassphrase = ""; showBackupPassphraseDialog = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Create encrypted academic backup")
+            }
+            OutlinedButton(onClick = { openBackupLauncher.launch(arrayOf("application/octet-stream", "application/x-clg1backup", "*/*")) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Restore encrypted academic backup")
+            }
+            OutlinedButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Delete my academic data")
+            }
+
+            Spacer(Modifier.height(14.dp))
             PlayBillingCard()
             if (message.isNotBlank()) Text(message)
         }
@@ -984,6 +1129,237 @@ fun ExamCommandCenterScreen() {
         }) { Text("Delete permanently") } },
         dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
     )
+
+    if (showCommunityTemplatesDialog) {
+        val communityTemplates = remember { TemplateLibrary.getCommunityTemplates() }
+        AlertDialog(
+            onDismissRequest = { showCommunityTemplatesDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.School, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Shared Grading Templates")
+                }
+            },
+            text = {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 440.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    item {
+                        Text(
+                            "Choose from verified institution templates or templates saved locally on your device. All grading criteria, regulations, and subject structures are imported securely.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    if (localTemplates.isNotEmpty()) {
+                        item {
+                            Text("My Saved Templates (Stored Locally)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                        }
+                        items(localTemplates) { saved ->
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(saved.title, fontWeight = FontWeight.SemiBold)
+                                    Text("${saved.college} · ${saved.term}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        TextButton(onClick = {
+                                            runCatching { AcademicTemplateCodec.parse(saved.templateJson) }
+                                                .onSuccess {
+                                                    pendingTemplate = it
+                                                    showCommunityTemplatesDialog = false
+                                                }
+                                                .onFailure { message = "Could not parse template: ${it.message}" }
+                                        }) { Text("Apply") }
+                                        TextButton(onClick = {
+                                            AcademicFileSharing.shareTextFile(context, "clg1-template.clg1template", "application/json", saved.templateJson, "Share saved template")
+                                        }) { Text("Share") }
+                                        TextButton(onClick = {
+                                            TemplateLibrary.deleteSavedTemplate(context, saved.id)
+                                            localTemplates = TemplateLibrary.getSavedLocalTemplates(context)
+                                        }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                                    }
+                                }
+                            }
+                        }
+                        item { HorizontalDivider(Modifier.padding(vertical = 4.dp)) }
+                    }
+
+                    item {
+                        Text("Curated Community Templates", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                    }
+
+                    items(communityTemplates) { template ->
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                        ) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(template.college, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
+                                Text("${template.program} ${template.department} · ${template.regulation}", style = MaterialTheme.typography.bodySmall)
+                                Text("${template.subjects.size} subjects · ${template.rules.passingPercent}% passing threshold · ${template.rules.gradeBands.size} grade bands", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                    TextButton(onClick = {
+                                        pendingTemplate = template
+                                        showCommunityTemplatesDialog = false
+                                    }) { Text("Preview & Apply") }
+                                    TextButton(onClick = {
+                                        runCatching {
+                                            val json = AcademicTemplateCodec.export(
+                                                template.college, template.program, template.department,
+                                                template.regulation, template.academicYear, template.termName,
+                                                template.rules, TemplateLibrary.createSubjectsFromTemplate(template)
+                                            )
+                                            AcademicFileSharing.shareTextFile(context, "community-template.clg1template", "application/json", json, "Share community template")
+                                        }.onFailure { message = "Share failed: ${it.message}" }
+                                    }) { Text("Share") }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showCommunityTemplatesDialog = false }) { Text("Close") }
+            }
+        )
+    }
+
+    if (showSaveTemplateDialog) {
+        AlertDialog(
+            onDismissRequest = { showSaveTemplateDialog = false },
+            title = { Text("Save Template Locally") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Store this grading scheme and subject structure on your device so you can reload or share it anytime with other students.", style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = saveTemplateTitle,
+                        onValueChange = { saveTemplateTitle = it },
+                        label = { Text("Template name / note") },
+                        placeholder = { Text("e.g., $college $term R$regulation") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    runCatching {
+                        val json = AcademicTemplateCodec.export(college, program, department, regulation, academicYear, term, rules, subjects.toList(), true)
+                        val template = AcademicTemplateCodec.parse(json)
+                        val title = saveTemplateTitle.ifBlank { "$college - $term" }
+                        TemplateLibrary.saveTemplateLocally(context, title, template, json)
+                        localTemplates = TemplateLibrary.getSavedLocalTemplates(context)
+                        message = "Template '$title' saved locally to your device."
+                        showSaveTemplateDialog = false
+                        saveTemplateTitle = ""
+                    }.onFailure { message = "Could not save template: ${it.message}" }
+                }) { Text("Save Locally") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSaveTemplateDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showPasteTemplateDialog) {
+        AlertDialog(
+            onDismissRequest = { showPasteTemplateDialog = false },
+            title = { Text("Import Template from Classmate") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Paste the template code or JSON text shared by your friend via WhatsApp, email, or chat.", style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = pasteTemplateText,
+                        onValueChange = { pasteTemplateText = it },
+                        label = { Text("Template JSON / Code") },
+                        modifier = Modifier.fillMaxWidth().height(160.dp)
+                    )
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = {
+                            val clip = clipboardManager.getText()?.text
+                            if (!clip.isNullOrBlank()) {
+                                pasteTemplateText = clip
+                            } else {
+                                message = "Clipboard is empty"
+                            }
+                        }) {
+                            Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Paste Clipboard")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val text = pasteTemplateText.trim()
+                        if (text.isBlank()) {
+                            message = "Paste template text first"
+                        } else {
+                            runCatching { AcademicTemplateCodec.parse(text) }
+                                .onSuccess {
+                                    pendingTemplate = it
+                                    showPasteTemplateDialog = false
+                                    pasteTemplateText = ""
+                                }
+                                .onFailure { message = "Invalid template text: ${it.message}" }
+                        }
+                    }
+                ) { Text("Parse & Review") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPasteTemplateDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showExportCsvSuccessDialog) {
+        AlertDialog(
+            onDismissRequest = { showExportCsvSuccessDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Download, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Academic CSV Exported")
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Your academic dataset has been compiled into the standardized format with ${subjects.size} subjects and ${subjects.sumOf { it.assessments.size }} assessments.")
+                    Text("Next steps to visualize in DataVis:\n1. Open DataVis web app below\n2. Upload or drag & drop your saved CSV file\n3. Explore comprehensive SGPA projections, percentiles, and subject correlation charts!", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://datavis-v5.streamlit.app/")))
+                    }
+                    showExportCsvSuccessDialog = false
+                }) {
+                    Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Open DataVis App")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    clipboardManager.setText(AnnotatedString(exportedCsvString))
+                    message = "CSV copied to clipboard!"
+                    showExportCsvSuccessDialog = false
+                }) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Copy CSV")
+                }
+            }
+        )
+    }
 }
 
 private fun InputStream.readBytesLimited(maxBytes: Int): ByteArray {

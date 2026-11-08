@@ -93,6 +93,31 @@ class AttendanceRepository(private val context: Context) {
         result
     }
 
+    suspend fun loadDemoData() {
+        val sampleSummary = AttendanceSummary(
+            present = 342,
+            absent = 58,
+            marked = 400,
+            notMarked = 10,
+            totalWorking = 410,
+            apiPercentage = 86,
+            tillDate = "Today (Demo Mode)"
+        )
+        val sampleSubjects = listOf(
+            SubjectAttendance("CS8501", "Theory of Computation", "Dr. Raman", 50, 44, 6, 0, 50, 88.0),
+            SubjectAttendance("CS8591", "Computer Networks", "Prof. Priya", 50, 42, 8, 0, 50, 84.0),
+            SubjectAttendance("CS8592", "Object Oriented Analysis & Design", "Dr. Karthik", 50, 45, 5, 0, 50, 90.0),
+            SubjectAttendance("EC8691", "Microprocessors & Microcontrollers", "Prof. Selvan", 50, 39, 11, 0, 50, 78.0),
+            SubjectAttendance("CS8581", "Networks Laboratory", "Dr. Meena", 40, 38, 2, 0, 40, 95.0),
+            SubjectAttendance("MA8551", "Algebra & Number Theory", "Prof. Anitha", 50, 41, 9, 0, 50, 82.0)
+        )
+        prefs.saveCredentials("DEMO-7100", "demo_mode_pass")
+        prefs.saveCachedAttendance(sampleSummary)
+        prefs.saveCachedSubjects(sampleSubjects)
+        prefs.saveStudentName("Autonomous Student (Demo)")
+        updateWidget()
+    }
+
     suspend fun logout() {
         prefs.clearAll()
         WorkManager.getInstance(context).cancelUniqueWork(AttendanceSyncWorker.WORK_NAME)

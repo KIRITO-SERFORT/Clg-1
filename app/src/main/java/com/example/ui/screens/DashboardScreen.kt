@@ -65,9 +65,10 @@ import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
@@ -250,7 +251,7 @@ fun DashboardScreen(
                         modifier = Modifier.testTag("logout_button")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.ExitToApp,
+                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
                             contentDescription = "Sign Out",
                             tint = MaterialTheme.colorScheme.outline
                         )
@@ -310,7 +311,8 @@ fun DashboardScreen(
                         summary = summary,
                         subjects = subjects,
                         targetThreshold = targetThreshold,
-                        onThresholdChange = onThresholdChange
+                        onThresholdChange = onThresholdChange,
+                        onNavigateToExams = { selectedTab = DashboardTab.EXAMS }
                     )
                 }
 
@@ -357,8 +359,10 @@ private fun OverviewTabContent(
     summary: AttendanceSummary,
     subjects: List<SubjectAttendance>,
     targetThreshold: Double,
-    onThresholdChange: (Double) -> Unit
+    onThresholdChange: (Double) -> Unit,
+    onNavigateToExams: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     val scrollState = rememberScrollState()
     val percentage = summary.percentage
     val targetPercent = (targetThreshold * 100).toInt()
@@ -657,6 +661,72 @@ private fun OverviewTabContent(
                     .format(Date(summary.lastSyncedMillis))
                 StatDivider()
                 StatRow(label = "Last Synced Time", value = formattedSyncTime)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // DataVis & Academic Setup Shortcut Card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 600.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Insights,
+                        contentDescription = "DataVis",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "DataVis Analytics & Grading Setup",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Text(
+                    text = "Export your academic data as a CSV, access community grading templates, and visualize deep performance distributions on DataVis.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = onNavigateToExams,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Exams & Grading")
+                    }
+
+                    FilledTonalButton(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://datavis-v5.streamlit.app/"))
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.OpenInNew,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Open DataVis")
+                    }
+                }
             }
         }
 

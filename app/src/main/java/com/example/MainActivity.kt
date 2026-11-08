@@ -76,6 +76,9 @@ class MainActivity : ComponentActivity() {
                                         isLoading = isLoading,
                                         onLoginClick = { user, pass ->
                                             viewModel.login(user, pass)
+                                        },
+                                        onDemoClick = {
+                                            viewModel.enterDemoMode()
                                         }
                                     )
                                 }
@@ -101,7 +104,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    if (!splashFinished || uiState is AttendanceUiState.Initializing) {
+                    if (!splashFinished && uiState is AttendanceUiState.Initializing) {
                         LoadingScreen(
                             modifier = Modifier
                                 .fillMaxSize()

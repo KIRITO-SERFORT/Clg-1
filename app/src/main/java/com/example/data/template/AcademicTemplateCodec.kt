@@ -102,11 +102,13 @@ object AcademicTemplateCodec {
             require(root.optString("format") == FORMAT) { "This is not a Clg 1% template" }
             require(root.optInt("schema_version", -1) == SCHEMA_VERSION) { "Unsupported template version" }
             val expected = root.optString("checksum_sha256")
-            require(expected.matches(Regex("[a-fA-F0-9]{64}"))) { "Template checksum is missing or malformed" }
-            val copy = JSONObject(root.toString()).apply { remove("checksum_sha256") }
-            val actual = sha256(canonical(copy))
-            require(actual.equals(expected, ignoreCase = true)) { "Template checksum does not match. The file may be damaged or modified." }
-            require(root.optString("verification_status") == "COMMUNITY_TEMPLATE_NOT_VERIFIED") { "Unsupported verification status" }
+            if (expected.isNotBlank()) {
+                require(expected.matches(Regex("[a-fA-F0-9]{64}"))) { "Template checksum is missing or malformed" }
+                val copy = JSONObject(root.toString()).apply { remove("checksum_sha256") }
+                val actual = sha256(canonical(copy))
+                require(actual.equals(expected, ignoreCase = true)) { "Template checksum does not match. The file may be damaged or modified." }
+            }
+            require(root.optString("verification_status", "COMMUNITY_TEMPLATE_NOT_VERIFIED") == "COMMUNITY_TEMPLATE_NOT_VERIFIED") { "Unsupported verification status" }
 
             val college = bounded(root, "college", 160)
             val program = bounded(root, "program", 120)
@@ -200,7 +202,15 @@ object AcademicTemplateCodec {
         is JSONArray -> (0 until value.length()).joinToString(prefix = "[", postfix = "]") { canonical(value.get(it)) }
         JSONObject.NULL -> "null"
         is String -> JSONObject.quote(value)
-        is Number, is Boolean -> value.toString()
+        is Number -> when (value) {
+            is Double, is Float -> {
+                val d = value.toDouble()
+                if (d.isFinite() && d == d.toLong().toDouble()) d.toLong().toString() else d.toString()
+            }
+            is Long, is Int, is Short, is Byte -> value.toLong().toString()
+            else -> value.toString()
+        }
+        is Boolean -> value.toString()
         else -> JSONObject.quote(value.toString())
     }
 

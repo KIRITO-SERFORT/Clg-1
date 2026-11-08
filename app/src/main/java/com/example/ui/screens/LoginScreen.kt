@@ -71,6 +71,7 @@ import com.example.ui.theme.TealSecondary
 fun LoginScreen(
     isLoading: Boolean,
     onLoginClick: (String, String) -> Unit,
+    onDemoClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var username by remember { mutableStateOf("") }
@@ -266,6 +267,26 @@ fun LoginScreen(
                             } else {
                                 Text("Sign In & Sync", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                             }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Offline Demo & Academic Workspace Button
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = onDemoClick,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .testTag("demo_workspace_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.School,
+                                contentDescription = "Academic Demo",
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Explore Demo & Academic Workspace", fontSize = 15.sp, fontWeight = FontWeight.Medium)
                         }
                     }
                 }

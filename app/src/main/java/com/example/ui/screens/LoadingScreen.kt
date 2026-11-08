@@ -70,7 +70,7 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 /** How long the loading screen stays at least (milliseconds). */
-const val SPLASH_MIN_MILLIS = 3200L
+const val SPLASH_MIN_MILLIS = 900L
 
 /** Background used only when you provide your own GIF (see LoadingScreen). */
 val LoadingBackground = Color(0xFF0B0F1A)

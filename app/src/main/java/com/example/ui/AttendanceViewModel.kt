@@ -55,31 +55,66 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun checkSavedSession() {
         viewModelScope.launch {
-            val creds = repository.getSavedCredentials()
-            val cached = repository.cachedAttendanceFlow.first()
-            val subjects = repository.cachedSubjectsFlow.first()
-            val studentName = repository.studentNameFlow.first()
-            val threshold = repository.targetThresholdFlow.first()
-            val syncInterval = repository.syncIntervalHoursFlow.first()
-            val themeMode = repository.themeModeFlow.first()
-            val notificationsEnabled = repository.notificationsEnabledFlow.first()
+            try {
+                val creds = repository.getSavedCredentials()
+                val cached = repository.cachedAttendanceFlow.first()
+                val subjects = repository.cachedSubjectsFlow.first()
+                val studentName = repository.studentNameFlow.first()
+                val threshold = repository.targetThresholdFlow.first()
+                val syncInterval = repository.syncIntervalHoursFlow.first()
+                val themeMode = repository.themeModeFlow.first()
+                val notificationsEnabled = repository.notificationsEnabledFlow.first()
 
-            if (creds != null && cached != null) {
+                if (creds != null && cached != null) {
+                    _uiState.value = AttendanceUiState.LoggedIn(
+                        username = creds.first,
+                        studentName = studentName,
+                        summary = cached,
+                        subjects = subjects,
+                        targetThreshold = threshold,
+                        syncIntervalHours = syncInterval,
+                        themeMode = themeMode,
+                        notificationsEnabled = notificationsEnabled
+                    )
+                    refresh(isBackground = true)
+                } else if (creds != null) {
+                    refresh(isBackground = false)
+                } else {
+                    _uiState.value = AttendanceUiState.LoggedOut
+                }
+            } catch (_: Throwable) {
+                _uiState.value = AttendanceUiState.LoggedOut
+            }
+        }
+    }
+
+    fun enterDemoMode() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                repository.loadDemoData()
+                val cached = repository.cachedAttendanceFlow.first()
+                val subjects = repository.cachedSubjectsFlow.first()
+                val studentName = repository.studentNameFlow.first()
+                val threshold = repository.targetThresholdFlow.first()
+                val syncInterval = repository.syncIntervalHoursFlow.first()
+                val themeMode = repository.themeModeFlow.first()
+                val notificationsEnabled = repository.notificationsEnabledFlow.first()
+
                 _uiState.value = AttendanceUiState.LoggedIn(
-                    username = creds.first,
-                    studentName = studentName,
-                    summary = cached,
+                    username = "DEMO-7100",
+                    studentName = studentName.ifBlank { "Autonomous Student (Demo)" },
+                    summary = cached ?: AttendanceSummary(342, 58, 400, 10, 410, 86, "Today (Demo Mode)"),
                     subjects = subjects,
                     targetThreshold = threshold,
                     syncIntervalHours = syncInterval,
                     themeMode = themeMode,
                     notificationsEnabled = notificationsEnabled
                 )
-                refresh(isBackground = true)
-            } else if (creds != null) {
-                refresh(isBackground = false)
-            } else {
-                _uiState.value = AttendanceUiState.LoggedOut
+            } catch (e: Exception) {
+                _errorMessage.emit("Loaded offline workspace: ${e.message}")
+            } finally {
+                _isLoading.value = false
             }
         }
     }
