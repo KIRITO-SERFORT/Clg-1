@@ -161,6 +161,10 @@ fun ExamCommandCenterScreen() {
     var examTime by remember { mutableStateOf("09:00") }
     var examNotes by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
+    val selectedExportIds = remember { mutableStateMapOf<String, Boolean>() }
+    var pendingCsvSubjectCount by remember { mutableStateOf(0) }
+    var pendingCsvRowCount by remember { mutableStateOf(0) }
+    var isTransferringCsv by remember { mutableStateOf(false) }
     var pendingTemplate by remember { mutableStateOf<CollegeTemplate?>(null) }
     var showTemplateReplaceConfirm by remember { mutableStateOf(false) }
     var pendingCsv by remember { mutableStateOf<String?>(null) }
@@ -244,7 +248,7 @@ fun ExamCommandCenterScreen() {
         root.put("passing_percent", savedPass.toDoubleOrNull() ?: 40.0)
         root.put("combination_method", savedCombination.name).put("missing_mark_policy", savedMissingPolicy.name).put("best_n", savedBestN)
         val bandArray = JSONArray()
-        savedBands.forEach { bandArray.put(JSONObject().put("minimum", band.minimumPercent).put("label", band.label).put("point", band.gradePoint).put("inclusive", band.inclusive)) }
+        savedBands.forEach { band -> bandArray.put(JSONObject().put("minimum", band.minimumPercent).put("label", band.label).put("point", band.gradePoint).put("inclusive", band.inclusive)) }
         root.put("grade_bands", bandArray)
         val subArray = JSONArray()
         subjects.forEach { s ->
