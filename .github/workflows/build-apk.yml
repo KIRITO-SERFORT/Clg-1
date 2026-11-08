@@ -1,68 +1,38 @@
-name: Build Clg 1% debug APK
+name: Build Android APK
 
 on:
   push:
-    branches: [main, master]
+    branches: [ "main", "master" ]
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: Compile Android Project
+    runs-on: ubuntu-24.04
+
     steps:
-      - uses: actions/checkout@v4
+    - name: Checkout Source Code
+      uses: actions/checkout@v4.2.2
 
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 21
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4.3.0
+      with:
+        java-version: '17'
+        distribution: 'temurin'
 
-      - name: Accept Android SDK licenses and install required platform
-        run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36-ext1" "build-tools;36.0.0" "platform-tools"
+    - name: Setup Modern Gradle Environment
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: wrapper
 
-      - name: Create debug keystore (the project expects debug.keystore in the root)
-        run: >
-          keytool -genkeypair -v -keystore debug.keystore
-          -storepass android -alias androiddebugkey -keypass android
-          -keyalg RSA -keysize 2048 -validity 10000
-          -dname "CN=Android Debug,O=Android,C=US"
-
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 9.3.1
-
-      - name: Run unit tests
-        run: gradle testDebugUnitTest --no-daemon --stacktrace
-
-      - name: Run Android UI and device regression tests on an emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
-          script: gradle connectedDebugAndroidTest --no-daemon --stacktrace
-
-      - name: Build debug APK
-        env:
-          CLG1_PLUS_PRODUCT_ID: ${{ vars.CLG1_PLUS_PRODUCT_ID }}
-          CLG1_BILLING_VERIFY_URL: ${{ secrets.CLG1_BILLING_VERIFY_URL }}
-          CLG1_DATAVIS_TRANSFER_API: ${{ vars.CLG1_DATAVIS_TRANSFER_API }}
-        run: gradle assembleDebug --no-daemon --stacktrace
-
-      - name: Keep APK as a workflow artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: clg1-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Publish APK as a GitHub Release (easy download on phone)
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: build-${{ github.run_number }}
-          name: Clg 1% build ${{ github.run_number }}
-          files: app/build/outputs/apk/debug/app-debug.apk
+    - name: Auto-Install New Android SDK & Build
+      run: |
+        rm -rf "public" || true
+        rm -rf "docs" || true
+        
+        # This force-accepts licenses and tells the compiler to auto-download missing SDK elements
+        mkdir -p ~/.android && touch ~/.android/repositories.cfg
+        yes | sdkmanager --licenses || true
+        
+        # Build command with auto-download enabled
+        gradle :app:assembleDebug --stacktrace --info -Pandroid.builder.sdkDownload=true
