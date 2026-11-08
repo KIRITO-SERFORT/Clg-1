@@ -1,4 +1,5 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.util.Properties
 
 plugins {
   alias(libs.plugins.android.application)
@@ -9,6 +10,20 @@ plugins {
 }
 
 fun buildConfigString(value: String): String = "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
+fun getEnvOrDotEnv(key: String): String {
+  val envVal = System.getenv(key)
+  if (!envVal.isNullOrEmpty()) return envVal
+  val envFile = rootProject.file(".env")
+  if (envFile.exists()) {
+    val props = Properties().apply {
+      envFile.inputStream().use { load(it) }
+    }
+    val propVal = props.getProperty(key)
+    if (!propVal.isNullOrEmpty()) return propVal.trim('"', '\'')
+  }
+  return ""
+}
 
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 
@@ -22,9 +37,9 @@ android {
     targetSdk = 36
     versionCode = 2
     versionName = "1.2"
-    buildConfigField("String", "CLG1_PLUS_PRODUCT_ID", buildConfigString(System.getenv("CLG1_PLUS_PRODUCT_ID") ?: ""))
-    buildConfigField("String", "BILLING_VERIFY_URL", buildConfigString(System.getenv("CLG1_BILLING_VERIFY_URL") ?: ""))
-    buildConfigField("String", "DATAVIS_TRANSFER_API_BASE", buildConfigString(System.getenv("CLG1_DATAVIS_TRANSFER_API") ?: ""))
+    buildConfigField("String", "CLG1_PLUS_PRODUCT_ID", buildConfigString(getEnvOrDotEnv("CLG1_PLUS_PRODUCT_ID")))
+    buildConfigField("String", "BILLING_VERIFY_URL", buildConfigString(getEnvOrDotEnv("CLG1_BILLING_VERIFY_URL")))
+    buildConfigField("String", "DATAVIS_TRANSFER_API_BASE", buildConfigString(getEnvOrDotEnv("CLG1_DATAVIS_TRANSFER_API")))
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -83,6 +98,7 @@ secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
+  ignoreList.add("CLG1_.*")
 }
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
@@ -123,15 +139,11 @@ dependencies {
   implementation(libs.coil.gif)
   implementation(libs.converter.moshi)
   implementation(libs.firebase.ai)
-  // Uncomment to use Firestore:
-  // implementation(libs.firebase.firestore)
-
-  // Uncomment ALL FOUR of the following dependencies together to use Firebase Auth and Google
-  // Sign-In via Credential Manager:
-  // implementation(libs.firebase.auth)
-  // implementation(libs.androidx.credentials)
-  // implementation(libs.androidx.credentials.play.services)
-  // implementation(libs.googleid)
+  implementation(libs.firebase.firestore)
+  implementation(libs.firebase.auth)
+  implementation(libs.androidx.credentials)
+  implementation(libs.androidx.credentials.play.services)
+  implementation(libs.googleid)
   implementation(libs.firebase.appcheck.recaptcha)
   implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)

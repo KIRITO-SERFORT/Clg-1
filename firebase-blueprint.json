@@ -1,0 +1,90 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Student profile holding name, college name, batch, and Plus membership status",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated user identifier matching request.auth.uid"
+        },
+        "name": {
+          "type": "string",
+          "description": "Student display name"
+        },
+        "collegeName": {
+          "type": "string",
+          "description": "Name of student's college or institution"
+        },
+        "batch": {
+          "type": "string",
+          "description": "Student academic batch or graduation year"
+        },
+        "isPlus": {
+          "type": "boolean",
+          "description": "Whether the user holds Clg 1% Plus entitlement"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of profile creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last profile update"
+        }
+      },
+      "required": ["userId", "name", "collegeName", "batch", "isPlus", "createdAt", "updatedAt"]
+    },
+    "AcademicRecord": {
+      "title": "AcademicRecord",
+      "description": "Archived term summary and calculation snapshot synced to cloud",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated user identifier matching request.auth.uid"
+        },
+        "termName": {
+          "type": "string",
+          "description": "Term or semester title"
+        },
+        "academicYear": {
+          "type": "string",
+          "description": "Academic year (e.g. 2026-27)"
+        },
+        "averagePercentage": {
+          "type": "number",
+          "description": "Average percentage across subjects"
+        },
+        "sgpa": {
+          "type": "number",
+          "description": "Semester grade point average"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of record creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last record update"
+        }
+      },
+      "required": ["userId", "termName", "academicYear", "averagePercentage", "sgpa", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Personal student profile document keyed by auth UID"
+    },
+    "/users/{userId}/academic_records/{recordId}": {
+      "schema": "AcademicRecord",
+      "description": "Student term academic record snapshots keyed by record ID"
+    }
+  }
+}

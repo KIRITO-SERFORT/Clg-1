@@ -32,12 +32,23 @@ class AttendanceRepository(private val context: Context) {
 
     val usernameFlow: Flow<String?> = prefs.usernameFlow
     val studentNameFlow: Flow<String> = prefs.studentNameFlow
+    val collegeNameFlow: Flow<String> = prefs.collegeNameFlow
+    val batchFlow: Flow<String> = prefs.batchFlow
+    val onboardingCompletedFlow: Flow<Boolean> = prefs.onboardingCompletedFlow
     val targetThresholdFlow: Flow<Double> = prefs.targetThresholdFlow
     val cachedAttendanceFlow: Flow<AttendanceSummary?> = prefs.cachedAttendanceFlow
     val cachedSubjectsFlow: Flow<List<SubjectAttendance>> = prefs.cachedSubjectsFlow
     val syncIntervalHoursFlow: Flow<Int> = prefs.syncIntervalHoursFlow
     val themeModeFlow: Flow<ThemeMode> = prefs.themeModeFlow
     val notificationsEnabledFlow: Flow<Boolean> = prefs.notificationsEnabledFlow
+
+    suspend fun saveUserProfile(name: String, college: String, batch: String) {
+        prefs.saveUserProfile(name, college, batch)
+    }
+
+    suspend fun setOnboardingCompleted(completed: Boolean = true) {
+        prefs.setOnboardingCompleted(completed)
+    }
 
     suspend fun getSavedCredentials(): Pair<String, String>? = prefs.getCredentials()
 
@@ -93,29 +104,28 @@ class AttendanceRepository(private val context: Context) {
         result
     }
 
-    suspend fun loadDemoData() {
-        val sampleSummary = AttendanceSummary(
-            present = 342,
-            absent = 58,
-            marked = 400,
-            notMarked = 10,
-            totalWorking = 410,
-            apiPercentage = 86,
-            tillDate = "Today (Demo Mode)"
+    suspend fun enterDirectMode(name: String, college: String, batch: String) {
+        val emptySummary = AttendanceSummary(
+            present = 0,
+            absent = 0,
+            marked = 0,
+            notMarked = 0,
+            totalWorking = 0,
+            apiPercentage = 0,
+            tillDate = "Direct Workspace"
         )
-        val sampleSubjects = listOf(
-            SubjectAttendance("CS8501", "Theory of Computation", "Dr. Raman", 50, 44, 6, 0, 50, 88.0),
-            SubjectAttendance("CS8591", "Computer Networks", "Prof. Priya", 50, 42, 8, 0, 50, 84.0),
-            SubjectAttendance("CS8592", "Object Oriented Analysis & Design", "Dr. Karthik", 50, 45, 5, 0, 50, 90.0),
-            SubjectAttendance("EC8691", "Microprocessors & Microcontrollers", "Prof. Selvan", 50, 39, 11, 0, 50, 78.0),
-            SubjectAttendance("CS8581", "Networks Laboratory", "Dr. Meena", 40, 38, 2, 0, 40, 95.0),
-            SubjectAttendance("MA8551", "Algebra & Number Theory", "Prof. Anitha", 50, 41, 9, 0, 50, 82.0)
-        )
-        prefs.saveCredentials("DEMO-7100", "demo_mode_pass")
-        prefs.saveCachedAttendance(sampleSummary)
-        prefs.saveCachedSubjects(sampleSubjects)
-        prefs.saveStudentName("Autonomous Student (Demo)")
+        prefs.saveCredentials(name.ifBlank { "STUDENT" }, "direct_access_pass")
+        prefs.saveUserProfile(name, college, batch)
+        prefs.saveCachedAttendance(emptySummary)
+        prefs.saveCachedSubjects(emptyList())
         updateWidget()
+    }
+
+    suspend fun loadDemoData() {
+        val currentName = prefs.studentNameFlow.first().ifBlank { "Student" }
+        val currentCollege = prefs.collegeNameFlow.first().ifBlank { "Engineering College" }
+        val currentBatch = prefs.batchFlow.first().ifBlank { "2024 - 2028" }
+        enterDirectMode(currentName, currentCollege, currentBatch)
     }
 
     suspend fun logout() {

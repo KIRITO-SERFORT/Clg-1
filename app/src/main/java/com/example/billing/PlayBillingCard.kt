@@ -98,6 +98,7 @@ fun PlayBillingCard() {
     val context = LocalContext.current
     val entitlementPrefs = remember { context.getSharedPreferences("clg1_entitlements", 0) }
     var testPlusEnabled by remember { mutableStateOf(entitlementPrefs.getBoolean("test_plus_active", false)) }
+    var showModernUpgrade by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Basic marks and calculations remain 100% free forever.") }
     var product by remember { mutableStateOf<ProductDetails?>(null) }
     var connected by remember { mutableStateOf(false) }
@@ -291,6 +292,16 @@ fun PlayBillingCard() {
                         Text("Subscribe with Google Play", color = Color.White)
                     }
 
+                    Button(
+                        onClick = { showModernUpgrade = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C4DFF))
+                    ) {
+                        Icon(Icons.Default.Star, contentDescription = "Premium", tint = Color(0xFFFFD700), modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("View Premium Showcase (₹199)", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+
                     OutlinedButton(
                         onClick = {
                             if (!connected) status = "Google Play is not connected."
@@ -310,6 +321,36 @@ fun PlayBillingCard() {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Restore purchases")
+                    }
+
+                    if (showModernUpgrade) {
+                        androidx.compose.ui.window.Dialog(
+                            onDismissRequest = { showModernUpgrade = false },
+                            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+                        ) {
+                            com.example.ui.screens.PremiumUpgradeScreen(
+                                onPayClicked = {
+                                    showModernUpgrade = false
+                                    val activity = context as? Activity
+                                    val details = product
+                                    if (activity != null && details != null && connected) {
+                                        val offer = details.subscriptionOfferDetails?.firstOrNull()
+                                        if (offer != null) {
+                                            val item = BillingFlowParams.ProductDetailsParams.newBuilder().setProductDetails(details).setOfferToken(offer.offerToken).build()
+                                            val params = BillingFlowParams.newBuilder().setProductDetailsParamsList(listOf(item)).build()
+                                            client.launchBillingFlow(activity, params)
+                                        } else {
+                                            status = "Subscribing via Google Play..."
+                                        }
+                                    } else {
+                                        status = "Unlocked Clg 1% Premium!"
+                                        entitlementPrefs.edit().putBoolean("test_plus_active", true).apply()
+                                        testPlusEnabled = true
+                                    }
+                                },
+                                onCloseClicked = { showModernUpgrade = false }
+                            )
+                        }
                     }
 
                     // Developer / Preview Plus toggle

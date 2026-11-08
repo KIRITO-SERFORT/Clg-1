@@ -43,6 +43,9 @@ class UserPreferences(private val context: Context) {
         private val KEY_NOTIFICATIONS_ENABLED = booleanPreferencesKey("key_notifications_enabled")
         private val KEY_TIMETABLE_JSON = stringPreferencesKey("key_cached_timetable_json")
         private val KEY_DAY_ORDER_ANCHOR = stringPreferencesKey("key_day_order_anchor")
+        private val KEY_COLLEGE_NAME = stringPreferencesKey("key_college_name")
+        private val KEY_BATCH = stringPreferencesKey("key_student_batch")
+        private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("key_onboarding_completed")
     }
 
     val usernameFlow: Flow<String?> = context.userPreferencesDataStore.data.map { prefs ->
@@ -51,6 +54,18 @@ class UserPreferences(private val context: Context) {
 
     val studentNameFlow: Flow<String> = context.userPreferencesDataStore.data.map { prefs ->
         prefs[KEY_STUDENT_NAME] ?: ""
+    }
+
+    val collegeNameFlow: Flow<String> = context.userPreferencesDataStore.data.map { prefs ->
+        prefs[KEY_COLLEGE_NAME] ?: ""
+    }
+
+    val batchFlow: Flow<String> = context.userPreferencesDataStore.data.map { prefs ->
+        prefs[KEY_BATCH] ?: ""
+    }
+
+    val onboardingCompletedFlow: Flow<Boolean> = context.userPreferencesDataStore.data.map { prefs ->
+        prefs[KEY_ONBOARDING_COMPLETED] ?: false
     }
 
     val targetThresholdFlow: Flow<Double> = context.userPreferencesDataStore.data.map { prefs ->
@@ -142,6 +157,33 @@ class UserPreferences(private val context: Context) {
     suspend fun saveStudentName(name: String) {
         context.userPreferencesDataStore.edit { prefs ->
             prefs[KEY_STUDENT_NAME] = name
+        }
+    }
+
+    suspend fun saveCollegeName(college: String) {
+        context.userPreferencesDataStore.edit { prefs ->
+            prefs[KEY_COLLEGE_NAME] = college.trim()
+        }
+    }
+
+    suspend fun saveBatch(batch: String) {
+        context.userPreferencesDataStore.edit { prefs ->
+            prefs[KEY_BATCH] = batch.trim()
+        }
+    }
+
+    suspend fun saveUserProfile(name: String, college: String, batch: String) {
+        context.userPreferencesDataStore.edit { prefs ->
+            prefs[KEY_STUDENT_NAME] = name.trim()
+            prefs[KEY_COLLEGE_NAME] = college.trim()
+            prefs[KEY_BATCH] = batch.trim()
+            prefs[KEY_ONBOARDING_COMPLETED] = true
+        }
+    }
+
+    suspend fun setOnboardingCompleted(completed: Boolean = true) {
+        context.userPreferencesDataStore.edit { prefs ->
+            prefs[KEY_ONBOARDING_COMPLETED] = completed
         }
     }
 

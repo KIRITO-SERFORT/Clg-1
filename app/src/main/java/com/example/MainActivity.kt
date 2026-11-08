@@ -25,6 +25,7 @@ import com.example.ui.AttendanceViewModel
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.LoadingScreen
 import com.example.ui.screens.LoginScreen
+import com.example.ui.screens.OnboardingScreen
 import com.example.ui.screens.SPLASH_MIN_MILLIS
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.delay
@@ -71,6 +72,23 @@ class MainActivity : ComponentActivity() {
                                     // Covered by the loading screen overlay below.
                                 }
 
+                                is AttendanceUiState.Onboarding -> {
+                                    OnboardingScreen(
+                                        initialName = state.initialName,
+                                        initialCollege = state.initialCollege,
+                                        initialBatch = state.initialBatch,
+                                        onContinueWorkspace = { name, college, batch ->
+                                            viewModel.completeOnboarding(name, college, batch, connectErp = false)
+                                        },
+                                        onConnectErp = { name, college, batch ->
+                                            viewModel.completeOnboarding(name, college, batch, connectErp = true)
+                                        },
+                                        onGoogleAuthSuccess = {
+                                            viewModel.handleGoogleAuthSuccess()
+                                        }
+                                    )
+                                }
+
                                 is AttendanceUiState.LoggedOut -> {
                                     LoginScreen(
                                         isLoading = isLoading,
@@ -79,6 +97,9 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onDemoClick = {
                                             viewModel.enterDemoMode()
+                                        },
+                                        onGoogleAuthSuccess = {
+                                            viewModel.handleGoogleAuthSuccess()
                                         }
                                     )
                                 }
@@ -87,6 +108,8 @@ class MainActivity : ComponentActivity() {
                                     DashboardScreen(
                                         username = state.username,
                                         studentName = state.studentName,
+                                        collegeName = state.collegeName,
+                                        batch = state.batch,
                                         summary = state.summary,
                                         subjects = state.subjects,
                                         targetThreshold = state.targetThreshold,

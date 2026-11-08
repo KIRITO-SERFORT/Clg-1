@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['userId', 'name', 'collegeName', 'batch', 'isPlus', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'name', 'collegeName', 'batch', 'isPlus', 'createdAt', 'updatedAt'])
+        && data.userId == userId
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.collegeName is string && data.collegeName.size() > 0 && data.collegeName.size() <= 150
+        && data.batch is string && data.batch.size() > 0 && data.batch.size() <= 50
+        && data.isPlus is bool
+        && data.createdAt is timestamp && data.createdAt <= request.time
+        && data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidAcademicRecord(data, userId) {
+      return data.keys().hasAll(['userId', 'termName', 'academicYear', 'averagePercentage', 'sgpa', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'termName', 'academicYear', 'averagePercentage', 'sgpa', 'createdAt', 'updatedAt'])
+        && data.userId == userId
+        && data.termName is string && data.termName.size() > 0 && data.termName.size() <= 100
+        && data.academicYear is string && data.academicYear.size() > 0 && data.academicYear.size() <= 50
+        && (data.averagePercentage is number || data.averagePercentage is int || data.averagePercentage is float)
+        && data.averagePercentage >= 0.0 && data.averagePercentage <= 100.0
+        && (data.sgpa is number || data.sgpa is int || data.sgpa is float)
+        && data.sgpa >= 0.0 && data.sgpa <= 10.0
+        && data.createdAt is timestamp && data.createdAt <= request.time
+        && data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUserProfile(request.resource.data, userId);
+      allow update: if isOwner(userId)
+                    && isValidUserProfile(request.resource.data, userId)
+                    && request.resource.data.userId == resource.data.userId
+                    && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isOwner(userId);
+
+      match /academic_records/{recordId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidAcademicRecord(request.resource.data, userId);
+        allow update: if isOwner(userId)
+                      && isValidAcademicRecord(request.resource.data, userId)
+                      && request.resource.data.userId == resource.data.userId
+                      && request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}

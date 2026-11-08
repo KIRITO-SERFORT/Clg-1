@@ -1,6 +1,6 @@
 {
-  "name": "ACGCET Widtz",
-  "description": "Attendance tracker and home screen widget for ACGCET students with Keycloak ERP sync, safe bunk calculator, and recovery hours analysis.",
+  "name": "Clg 1%",
+  "description": "Premium attendance tracker and student workspace for all colleges with cloud sync, timetable manager, exam countdown, and homescreen widgets.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

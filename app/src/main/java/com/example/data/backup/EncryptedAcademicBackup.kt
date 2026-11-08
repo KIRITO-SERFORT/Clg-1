@@ -36,9 +36,9 @@ object EncryptedAcademicBackup {
                 append(HEADER).append('\n')
                 append(VERSION).append('\n')
                 append(ITERATIONS).append('\n')
-                append(Base64.encodeToString(salt, Base64.NO_WRAP)).append('\n')
-                append(Base64.encodeToString(iv, Base64.NO_WRAP)).append('\n')
-                append(Base64.encodeToString(encrypted, Base64.NO_WRAP)).append('\n')
+                append(encodeBase64(salt)).append('\n')
+                append(encodeBase64(iv)).append('\n')
+                append(encodeBase64(encrypted)).append('\n')
             }
             envelope.toByteArray(StandardCharsets.UTF_8)
         } finally {
@@ -56,7 +56,7 @@ object EncryptedAcademicBackup {
         require(iterations in 100_000..1_000_000) { "Unsafe backup KDF setting" }
         val salt = decodeBase64(parts[3], 16)
         val iv = decodeBase64(parts[4], 12)
-        val encrypted = try { Base64.decode(parts[5], Base64.NO_WRAP) } catch (_: IllegalArgumentException) {
+        val encrypted = try { decodeBase64Raw(parts[5]) } catch (_: IllegalArgumentException) {
             throw IllegalArgumentException("Backup payload is malformed")
         }
         require(encrypted.size in 16..(MAX_BACKUP_BYTES + 16)) { "Backup payload size is invalid" }
@@ -86,8 +86,34 @@ object EncryptedAcademicBackup {
         }
     }
 
+    private fun encodeBase64(bytes: ByteArray): String {
+        return try {
+            java.util.Base64.getEncoder().encodeToString(bytes)
+        } catch (_: Throwable) {
+            Base64.encodeToString(bytes, Base64.NO_WRAP)
+        }
+    }
+
+    private fun decodeBase64Raw(value: String): ByteArray {
+        return try {
+            try {
+                java.util.Base64.getDecoder().decode(value)
+            } catch (_: Throwable) {
+                Base64.decode(value, Base64.NO_WRAP)
+            }
+        } catch (_: Exception) {
+            throw IllegalArgumentException("Backup payload is malformed")
+        }
+    }
+
     private fun decodeBase64(value: String, expectedLength: Int): ByteArray {
-        val decoded = try { Base64.decode(value, Base64.NO_WRAP) } catch (_: IllegalArgumentException) {
+        val decoded = try {
+            try {
+                java.util.Base64.getDecoder().decode(value)
+            } catch (_: Throwable) {
+                Base64.decode(value, Base64.NO_WRAP)
+            }
+        } catch (_: Exception) {
             throw IllegalArgumentException("Backup cryptographic header is malformed")
         }
         require(decoded.size == expectedLength) { "Backup cryptographic header has an invalid length" }

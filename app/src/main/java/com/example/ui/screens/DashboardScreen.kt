@@ -156,6 +156,8 @@ enum class DashboardTab {
 fun DashboardScreen(
     username: String,
     studentName: String,
+    collegeName: String = "",
+    batch: String = "",
     summary: AttendanceSummary,
     subjects: List<SubjectAttendance>,
     targetThreshold: Double,
@@ -217,8 +219,15 @@ fun DashboardScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                             )
+                            val subtitleText = when {
+                                collegeName.isNotBlank() && batch.isNotBlank() -> "$collegeName • $batch"
+                                collegeName.isNotBlank() -> collegeName
+                                batch.isNotBlank() -> batch
+                                username.isNotBlank() && !username.equals("student", ignoreCase = true) && !username.equals("demo-7100", ignoreCase = true) -> "Reg: ${username.uppercase(Locale.getDefault())}"
+                                else -> "Student Academic Workspace"
+                            }
                             Text(
-                                text = "Reg: ${username.uppercase(Locale.getDefault())} • ${ErpConnectors.DEFAULT_SHORT_NAME}",
+                                text = subtitleText,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

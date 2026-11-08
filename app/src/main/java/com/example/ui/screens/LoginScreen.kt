@@ -72,6 +72,7 @@ fun LoginScreen(
     isLoading: Boolean,
     onLoginClick: (String, String) -> Unit,
     onDemoClick: () -> Unit = {},
+    onGoogleAuthSuccess: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var username by remember { mutableStateOf("") }
@@ -134,7 +135,7 @@ fun LoginScreen(
                 )
 
                 Text(
-                    text = "Sign in with your ACGCET ERP account",
+                    text = "Sign in with your College ERP Portal (Optional)",
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontWeight = FontWeight.Medium
                     ),
@@ -271,23 +272,31 @@ fun LoginScreen(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Offline Demo & Academic Workspace Button
+                        // Continue without ERP Button (All Colleges)
                         androidx.compose.material3.OutlinedButton(
                             onClick = onDemoClick,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(50.dp)
-                                .testTag("demo_workspace_button")
+                                .testTag("direct_workspace_button")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.School,
-                                contentDescription = "Academic Demo",
+                                contentDescription = "Academic Workspace",
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Explore Demo & Academic Workspace", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                            Text("Continue without ERP (All Colleges)", fontSize = 15.sp, fontWeight = FontWeight.Medium)
                         }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        com.example.util.GoogleSignInButton(
+                            label = "Sign in with Google Cloud",
+                            onAuthSuccess = onGoogleAuthSuccess,
+                            onAuthError = { /* non-fatal, logged */ }
+                        )
                     }
                 }
 

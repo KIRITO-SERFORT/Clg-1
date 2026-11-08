@@ -20,10 +20,17 @@ import java.io.IOException
 
 sealed class AttendanceUiState {
     object Initializing : AttendanceUiState()
+    data class Onboarding(
+        val initialName: String = "",
+        val initialCollege: String = "",
+        val initialBatch: String = ""
+    ) : AttendanceUiState()
     object LoggedOut : AttendanceUiState()
     data class LoggedIn(
         val username: String,
         val studentName: String,
+        val collegeName: String = "",
+        val batch: String = "",
         val summary: AttendanceSummary,
         val subjects: List<SubjectAttendance>,
         val targetThreshold: Double,
@@ -37,6 +44,7 @@ sealed class AttendanceUiState {
 class AttendanceViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = AttendanceRepository(application)
+    private val firestoreRepo = com.example.data.repository.FirestoreUserRepository(application)
 
     private val _uiState = MutableStateFlow<AttendanceUiState>(AttendanceUiState.Initializing)
     val uiState: StateFlow<AttendanceUiState> = _uiState.asStateFlow()
@@ -60,15 +68,25 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                 val cached = repository.cachedAttendanceFlow.first()
                 val subjects = repository.cachedSubjectsFlow.first()
                 val studentName = repository.studentNameFlow.first()
+                val collegeName = repository.collegeNameFlow.first()
+                val batch = repository.batchFlow.first()
+                val onboardingCompleted = repository.onboardingCompletedFlow.first()
                 val threshold = repository.targetThresholdFlow.first()
                 val syncInterval = repository.syncIntervalHoursFlow.first()
                 val themeMode = repository.themeModeFlow.first()
                 val notificationsEnabled = repository.notificationsEnabledFlow.first()
 
+                if (!onboardingCompleted && creds == null) {
+                    _uiState.value = AttendanceUiState.Onboarding(studentName, collegeName, batch)
+                    return@launch
+                }
+
                 if (creds != null && cached != null) {
                     _uiState.value = AttendanceUiState.LoggedIn(
                         username = creds.first,
-                        studentName = studentName,
+                        studentName = studentName.ifBlank { creds.first },
+                        collegeName = collegeName,
+                        batch = batch,
                         summary = cached,
                         subjects = subjects,
                         targetThreshold = threshold,
@@ -76,45 +94,109 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                         themeMode = themeMode,
                         notificationsEnabled = notificationsEnabled
                     )
-                    refresh(isBackground = true)
-                } else if (creds != null) {
+                    if (creds.first != "STUDENT" && creds.second != "direct_access_pass") {
+                        refresh(isBackground = true)
+                    }
+                } else if (creds != null && creds.second != "direct_access_pass") {
                     refresh(isBackground = false)
+                } else if (!onboardingCompleted) {
+                    _uiState.value = AttendanceUiState.Onboarding(studentName, collegeName, batch)
                 } else {
                     _uiState.value = AttendanceUiState.LoggedOut
                 }
             } catch (_: Throwable) {
-                _uiState.value = AttendanceUiState.LoggedOut
+                _uiState.value = AttendanceUiState.Onboarding()
             }
         }
     }
 
-    fun enterDemoMode() {
+    fun completeOnboarding(name: String, college: String, batch: String, connectErp: Boolean) {
+        viewModelScope.launch {
+            repository.saveUserProfile(name, college, batch)
+            trySyncToFirestore(name, college, batch)
+            if (connectErp) {
+                _uiState.value = AttendanceUiState.LoggedOut
+            } else {
+                enterDirectWorkspace(name, college, batch)
+            }
+        }
+    }
+
+    fun enterDirectWorkspace(name: String, college: String, batch: String) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                repository.loadDemoData()
-                val cached = repository.cachedAttendanceFlow.first()
-                val subjects = repository.cachedSubjectsFlow.first()
-                val studentName = repository.studentNameFlow.first()
+                repository.enterDirectMode(name, college, batch)
+                trySyncToFirestore(name, college, batch)
                 val threshold = repository.targetThresholdFlow.first()
                 val syncInterval = repository.syncIntervalHoursFlow.first()
                 val themeMode = repository.themeModeFlow.first()
                 val notificationsEnabled = repository.notificationsEnabledFlow.first()
 
                 _uiState.value = AttendanceUiState.LoggedIn(
-                    username = "DEMO-7100",
-                    studentName = studentName.ifBlank { "Autonomous Student (Demo)" },
-                    summary = cached ?: AttendanceSummary(342, 58, 400, 10, 410, 86, "Today (Demo Mode)"),
-                    subjects = subjects,
+                    username = name.ifBlank { "STUDENT" },
+                    studentName = name.ifBlank { "Student" },
+                    collegeName = college.ifBlank { "College of Engineering" },
+                    batch = batch.ifBlank { "2024 - 2028" },
+                    summary = AttendanceSummary(0, 0, 0, 0, 0, 0, "Direct Workspace"),
+                    subjects = emptyList(),
                     targetThreshold = threshold,
                     syncIntervalHours = syncInterval,
                     themeMode = themeMode,
                     notificationsEnabled = notificationsEnabled
                 )
             } catch (e: Exception) {
-                _errorMessage.emit("Loaded offline workspace: ${e.message}")
+                _errorMessage.emit("Setup error: ${e.message}")
             } finally {
                 _isLoading.value = false
+            }
+        }
+    }
+
+    fun enterDemoMode() {
+        viewModelScope.launch {
+            val studentName = repository.studentNameFlow.first().ifBlank { "Student" }
+            val collegeName = repository.collegeNameFlow.first().ifBlank { "College of Engineering" }
+            val batch = repository.batchFlow.first().ifBlank { "2024 - 2028" }
+            enterDirectWorkspace(studentName, collegeName, batch)
+        }
+    }
+
+    private fun trySyncToFirestore(name: String, college: String, batch: String) {
+        viewModelScope.launch {
+            if (firestoreRepo.currentUserId() != null) {
+                try {
+                    firestoreRepo.saveProfile(name, college, batch)
+                } catch (e: Exception) {
+                    android.util.Log.w("AttendanceVM", "Cloud profile sync deferred: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun handleGoogleAuthSuccess() {
+        viewModelScope.launch {
+            try {
+                val remoteProfile = firestoreRepo.getProfile()
+                if (remoteProfile != null && remoteProfile.name.isNotBlank()) {
+                    repository.saveUserProfile(remoteProfile.name, remoteProfile.collegeName, remoteProfile.batch)
+                    repository.setOnboardingCompleted(true)
+                    val creds = repository.getSavedCredentials()
+                    if (creds == null) {
+                        enterDirectWorkspace(remoteProfile.name, remoteProfile.collegeName, remoteProfile.batch)
+                    } else {
+                        checkSavedSession()
+                    }
+                } else {
+                    val localName = repository.studentNameFlow.first()
+                    val localCollege = repository.collegeNameFlow.first()
+                    val localBatch = repository.batchFlow.first()
+                    if (localName.isNotBlank() && localCollege.isNotBlank()) {
+                        firestoreRepo.saveProfile(localName, localCollege, localBatch)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("AttendanceVM", "Google auth sync handling: ${e.message}")
             }
         }
     }
@@ -132,6 +214,8 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             _isLoading.value = true
             try {
                 val result = repository.loginAndFetch(cleanUser, pass)
+                val collegeName = repository.collegeNameFlow.first()
+                val batch = repository.batchFlow.first()
                 val threshold = repository.targetThresholdFlow.first()
                 val syncInterval = repository.syncIntervalHoursFlow.first()
                 val themeMode = repository.themeModeFlow.first()
@@ -140,6 +224,8 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                 _uiState.value = AttendanceUiState.LoggedIn(
                     username = cleanUser,
                     studentName = result.studentName,
+                    collegeName = collegeName,
+                    batch = batch,
                     summary = result.summary,
                     subjects = result.subjects,
                     targetThreshold = threshold,
@@ -179,6 +265,10 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                     return@launch
                 }
                 val result = repository.refreshAttendance()
+                val collegeName = (currentState as? AttendanceUiState.LoggedIn)?.collegeName
+                    ?: repository.collegeNameFlow.first()
+                val batch = (currentState as? AttendanceUiState.LoggedIn)?.batch
+                    ?: repository.batchFlow.first()
                 val threshold = repository.targetThresholdFlow.first()
                 val syncInterval = repository.syncIntervalHoursFlow.first()
                 val themeMode = repository.themeModeFlow.first()
@@ -187,6 +277,8 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                 _uiState.value = AttendanceUiState.LoggedIn(
                     username = creds.first,
                     studentName = result.studentName,
+                    collegeName = collegeName,
+                    batch = batch,
                     summary = result.summary,
                     subjects = result.subjects,
                     targetThreshold = threshold,
