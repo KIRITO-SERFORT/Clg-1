@@ -17,10 +17,30 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import com.example.R
+import com.example.billing.AdMobRewardedAdModal
+import com.example.data.analytics.AiAcademicAdvisorService
+import com.example.data.analytics.AiAnalyticsUiState
+import com.example.ui.kit.ClgBackground
+import com.example.ui.kit.ClgBottomBar
+import com.example.ui.kit.ClgColors
+import com.example.ui.kit.ClgTabContent
+import com.example.ui.kit.GlassCard
+import com.example.ui.kit.GradientButton
+import com.example.ui.kit.NavItem
+import com.example.ui.kit.SkeletonBox
+import com.example.ui.kit.rememberReduceMotion
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Stars
+import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.List
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import android.content.ActivityNotFoundException
 import android.widget.Toast
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Construction
@@ -197,162 +217,148 @@ fun DashboardScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(
-                            painter = painterResource(id = R.drawable.app_logo),
-                            contentDescription = "Clg 1% logo",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = if (studentName.isNotBlank()) studentName else "Clg 1%",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold
+    ClgBackground(modifier = modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Image(
+                                painter = painterResource(id = R.drawable.clg1_logo),
+                                contentDescription = "Clg 1% logo",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .border(1.dp, ClgColors.Cyan.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = if (studentName.isNotBlank()) studentName else "Clg 1%",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = Color.White
                                 )
-                            )
-                            val subtitleText = when {
-                                collegeName.isNotBlank() && batch.isNotBlank() -> "$collegeName • $batch"
-                                collegeName.isNotBlank() -> collegeName
-                                batch.isNotBlank() -> batch
-                                username.isNotBlank() && !username.equals("student", ignoreCase = true) && !username.equals("demo-7100", ignoreCase = true) -> "Reg: ${username.uppercase(Locale.getDefault())}"
-                                else -> "Student Academic Workspace"
+                                val subtitleText = when {
+                                    collegeName.isNotBlank() && batch.isNotBlank() -> "$collegeName • $batch"
+                                    collegeName.isNotBlank() -> collegeName
+                                    batch.isNotBlank() -> batch
+                                    username.isNotBlank() && !username.equals("student", ignoreCase = true) && !username.equals("demo-7100", ignoreCase = true) -> "Reg: ${username.uppercase(Locale.getDefault())}"
+                                    else -> "Student Academic Workspace"
+                                }
+                                Text(
+                                    text = subtitleText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ClgColors.TextMuted
+                                )
                             }
-                            Text(
-                                text = subtitleText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
                         }
-                    }
-                },
-                actions = {
-                    IconButton(
-                        onClick = onRefreshClick,
-                        enabled = !isRefreshing,
-                        modifier = Modifier.testTag("refresh_button")
-                    ) {
-                        if (isRefreshing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        } else {
+                    },
+                    actions = {
+                        IconButton(
+                            onClick = onRefreshClick,
+                            enabled = !isRefreshing,
+                            modifier = Modifier.testTag("refresh_button")
+                        ) {
+                            if (isRefreshing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = ClgColors.Cyan
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Refresh Attendance",
+                                    tint = ClgColors.Cyan
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = { showLogoutDialog = true },
+                            modifier = Modifier.testTag("logout_button")
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Refresh Attendance",
-                                tint = MaterialTheme.colorScheme.primary
+                                imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = "Sign Out",
+                                tint = ClgColors.TextMuted
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    )
+                )
+            },
+            bottomBar = {
+                val navItems = listOf(
+                    NavItem("Overview", Icons.Rounded.Home),
+                    NavItem("Subjects", Icons.Rounded.List),
+                    NavItem("Analytics", Icons.Default.Insights),
+                    NavItem("Exams", Icons.Rounded.DateRange),
+                    NavItem("Settings", Icons.Rounded.Settings)
+                )
+                ClgBottomBar(
+                    items = navItems,
+                    selected = selectedTab.ordinal,
+                    onSelect = { selectedTab = DashboardTab.values()[it] }
+                )
+            },
+            modifier = Modifier.fillMaxSize()
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                ClgTabContent(target = selectedTab) { currentTab ->
+                    when (currentTab) {
+                        DashboardTab.OVERVIEW -> {
+                            OverviewTabContent(
+                                summary = summary,
+                                subjects = subjects,
+                                targetThreshold = targetThreshold,
+                                onThresholdChange = onThresholdChange,
+                                onNavigateToExams = { selectedTab = DashboardTab.EXAMS }
+                            )
+                        }
+
+                        DashboardTab.SUBJECTS -> {
+                            SubjectsTabContent(
+                                subjects = subjects,
+                                targetThreshold = targetThreshold
+                            )
+                        }
+
+                        DashboardTab.SIMULATOR -> {
+                            AnalyticsAndSimulatorTabContent(
+                                summary = summary,
+                                subjects = subjects,
+                                targetThreshold = targetThreshold,
+                                studentName = studentName,
+                                collegeName = collegeName
+                            )
+                        }
+
+                        DashboardTab.EXAMS -> {
+                            ExamCommandCenterScreen()
+                        }
+
+                        DashboardTab.SETTINGS -> {
+                            SettingsTabContent(
+                                themeMode = themeMode,
+                                notificationsEnabled = notificationsEnabled,
+                                targetThreshold = targetThreshold,
+                                onThemeModeChange = onThemeModeChange,
+                                onNotificationsEnabledChange = onNotificationsEnabledChange,
+                                onThresholdChange = onThresholdChange
                             )
                         }
                     }
-
-                    IconButton(
-                        onClick = { showLogoutDialog = true },
-                        modifier = Modifier.testTag("logout_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                            contentDescription = "Sign Out",
-                            tint = MaterialTheme.colorScheme.outline
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-        },
-        bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface
-            ) {
-                NavigationBarItem(
-                    selected = selectedTab == DashboardTab.OVERVIEW,
-                    onClick = { selectedTab = DashboardTab.OVERVIEW },
-                    icon = { Icon(Icons.Default.Dashboard, contentDescription = "Overview") },
-                    label = { Text("Overview") }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == DashboardTab.SUBJECTS,
-                    onClick = { selectedTab = DashboardTab.SUBJECTS },
-                    icon = { Icon(Icons.Default.School, contentDescription = "Subjects") },
-                    label = { Text("Subjects") }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == DashboardTab.SIMULATOR,
-                    onClick = { selectedTab = DashboardTab.SIMULATOR },
-                    icon = { Icon(Icons.Default.Insights, contentDescription = "Analytics") },
-                    label = { Text("Analytics") }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == DashboardTab.EXAMS,
-                    onClick = { selectedTab = DashboardTab.EXAMS },
-                    icon = { Icon(Icons.Default.DateRange, contentDescription = "Exams") },
-                    label = { Text("Exams") }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == DashboardTab.SETTINGS,
-                    onClick = { selectedTab = DashboardTab.SETTINGS },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-                    label = { Text("Settings") }
-                )
-            }
-        },
-        modifier = modifier.fillMaxSize()
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            when (selectedTab) {
-                DashboardTab.OVERVIEW -> {
-                    OverviewTabContent(
-                        summary = summary,
-                        subjects = subjects,
-                        targetThreshold = targetThreshold,
-                        onThresholdChange = onThresholdChange,
-                        onNavigateToExams = { selectedTab = DashboardTab.EXAMS }
-                    )
-                }
-
-                DashboardTab.SUBJECTS -> {
-                    SubjectsTabContent(
-                        subjects = subjects,
-                        targetThreshold = targetThreshold
-                    )
-                }
-
-                DashboardTab.SIMULATOR -> {
-                    AnalyticsAndSimulatorTabContent(
-                        summary = summary,
-                        subjects = subjects,
-                        targetThreshold = targetThreshold
-                    )
-                }
-
-                DashboardTab.EXAMS -> {
-                    ExamCommandCenterScreen()
-                }
-
-                DashboardTab.SETTINGS -> {
-                    SettingsTabContent(
-                        themeMode = themeMode,
-                        notificationsEnabled = notificationsEnabled,
-                        targetThreshold = targetThreshold,
-                        onThemeModeChange = onThemeModeChange,
-                        onNotificationsEnabledChange = onNotificationsEnabledChange,
-                        onThresholdChange = onThresholdChange
-                    )
                 }
             }
         }
@@ -950,9 +956,43 @@ private fun SubjectCard(
 private fun AnalyticsAndSimulatorTabContent(
     summary: AttendanceSummary,
     subjects: List<SubjectAttendance>,
-    targetThreshold: Double
+    targetThreshold: Double,
+    studentName: String = "",
+    collegeName: String = ""
 ) {
+    val coroutineScope = rememberCoroutineScope()
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
     val scrollState = rememberScrollState()
+
+    val advisorService = remember { AiAcademicAdvisorService() }
+    var aiState by remember { mutableStateOf<AiAnalyticsUiState>(AiAnalyticsUiState.Idle) }
+    var showRewardedAd by remember { mutableStateOf(false) }
+    var hasRewardedAiCredit by remember { mutableStateOf(false) }
+
+    if (showRewardedAd) {
+        AdMobRewardedAdModal(
+            onRewardEarned = {
+                hasRewardedAiCredit = true
+                coroutineScope.launch {
+                    aiState = AiAnalyticsUiState.Loading
+                    try {
+                        val advice = advisorService.generateAcademicStrategy(
+                            summary = summary,
+                            subjects = subjects,
+                            targetThreshold = targetThreshold,
+                            studentName = studentName.ifBlank { "Student" },
+                            collegeName = collegeName.ifBlank { "College of Engineering" }
+                        )
+                        aiState = AiAnalyticsUiState.Success(advice)
+                    } catch (e: Exception) {
+                        aiState = AiAnalyticsUiState.Error(e.message ?: "Failed to generate AI analytics")
+                    }
+                }
+            },
+            onDismiss = { showRewardedAd = false }
+        )
+    }
 
     var deltaClasses by remember { mutableIntStateOf(0) }
     var simulationMode by remember { mutableStateOf("attend") } // "attend" or "bunk"
@@ -1181,6 +1221,230 @@ private fun AnalyticsAndSimulatorTabContent(
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // =========================================================================
+        // GEMINI AI ACADEMIC ADVISOR (Monetized via AdMob Rewarded Ad)
+        // =========================================================================
+        GlassCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 600.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(listOf(ClgColors.CyanDeep, ClgColors.Cyan))
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "Gemini AI",
+                            tint = ClgColors.Navy,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Gemini AI Academic Strategy",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                        Text(
+                            text = "Powered by Google Gemini 3.8 Flash",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ClgColors.TextMuted
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(ClgColors.Cyan.copy(alpha = 0.15f))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = if (hasRewardedAiCredit) "Active" else "Rewarded Ad",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = ClgColors.Cyan
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Get an in-depth diagnosis of your attendance health, safe skips buffer, exam debarment risk, and study time allocation tailored specifically to your schedule.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = ClgColors.TextMuted
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            when (val state = aiState) {
+                is AiAnalyticsUiState.Idle -> {
+                    GradientButton(
+                        text = if (hasRewardedAiCredit) "Generate Gemini AI Strategy" else "Watch Ad to Unlock AI Strategy",
+                        onClick = {
+                            if (hasRewardedAiCredit) {
+                                coroutineScope.launch {
+                                    aiState = AiAnalyticsUiState.Loading
+                                    try {
+                                        val advice = advisorService.generateAcademicStrategy(
+                                            summary = summary,
+                                            subjects = subjects,
+                                            targetThreshold = targetThreshold,
+                                            studentName = studentName.ifBlank { "Student" },
+                                            collegeName = collegeName.ifBlank { "College of Engineering" }
+                                        )
+                                        aiState = AiAnalyticsUiState.Success(advice)
+                                    } catch (e: Exception) {
+                                        aiState = AiAnalyticsUiState.Error(e.message ?: "Failed to generate AI analytics")
+                                    }
+                                }
+                            } else {
+                                showRewardedAd = true
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("generate_ai_analytics_button")
+                    )
+                }
+
+                is AiAnalyticsUiState.AdRequired -> {
+                    GradientButton(
+                        text = "Watch Sponsored Ad to Unlock",
+                        onClick = { showRewardedAd = true },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                is AiAnalyticsUiState.AdPlaying -> {
+                    // Handled by modal
+                }
+
+                is AiAnalyticsUiState.Loading -> {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = ClgColors.Cyan
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Gemini 3.8 Flash is analyzing your academic records...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ClgColors.Cyan
+                            )
+                        }
+                        SkeletonBox(height = 20.dp, width = 220.dp)
+                        SkeletonBox(height = 60.dp)
+                        SkeletonBox(height = 40.dp)
+                        SkeletonBox(height = 50.dp)
+                    }
+                }
+
+                is AiAnalyticsUiState.Success -> {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(ClgColors.NavyCard.copy(alpha = 0.7f))
+                                .border(1.dp, ClgColors.Cyan.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                .padding(16.dp)
+                        ) {
+                            Text(
+                                text = state.adviceText,
+                                style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
+                                color = Color.White
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(state.adviceText))
+                                    Toast.makeText(context, "AI Strategy copied to clipboard", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = CircleShape,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, ClgColors.Outline)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = ClgColors.Cyan, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Copy Report", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                            }
+
+                            GradientButton(
+                                text = "Re-analyze",
+                                onClick = { showRewardedAd = true },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+
+                is AiAnalyticsUiState.Error -> {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "AI Generation Error: ${state.message}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ClgColors.Danger
+                        )
+                        GradientButton(
+                            text = "Retry Analysis",
+                            onClick = {
+                                if (hasRewardedAiCredit) {
+                                    coroutineScope.launch {
+                                        aiState = AiAnalyticsUiState.Loading
+                                        try {
+                                            val advice = advisorService.generateAcademicStrategy(
+                                                summary = summary,
+                                                subjects = subjects,
+                                                targetThreshold = targetThreshold,
+                                                studentName = studentName.ifBlank { "Student" },
+                                                collegeName = collegeName.ifBlank { "College of Engineering" }
+                                            )
+                                            aiState = AiAnalyticsUiState.Success(advice)
+                                        } catch (e: Exception) {
+                                            aiState = AiAnalyticsUiState.Error(e.message ?: "Failed to generate AI analytics")
+                                        }
+                                    }
+                                } else {
+                                    showRewardedAd = true
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }

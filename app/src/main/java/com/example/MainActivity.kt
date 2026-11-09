@@ -22,34 +22,36 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.preferences.ThemeMode
 import com.example.ui.AttendanceUiState
 import com.example.ui.AttendanceViewModel
+import com.example.ui.kit.ClgTheme
+import com.example.ui.kit.LoadingScreen
 import com.example.ui.screens.DashboardScreen
-import com.example.ui.screens.LoadingScreen
 import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.OnboardingScreen
-import com.example.ui.screens.SPLASH_MIN_MILLIS
-import com.example.ui.theme.MyApplicationTheme
-import kotlinx.coroutines.delay
+import com.example.util.configureAppCheck
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.saveable.rememberSaveable
 import kotlinx.coroutines.flow.collectLatest
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Configure App Check before any UI or Firebase operations
+        configureAppCheck(this, intent)
         enableEdgeToEdge()
         setContent {
             val viewModel: AttendanceViewModel = viewModel()
             val themeMode by viewModel.themeModeFlow.collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
+            val isDark = when (themeMode) {
+                ThemeMode.DARK -> true
+                ThemeMode.LIGHT -> false
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+            }
 
-            MyApplicationTheme(themeMode = themeMode) {
+            ClgTheme(darkTheme = isDark) {
                 val uiState by viewModel.uiState.collectAsStateWithLifecycle()
                 val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
                 val snackbarHostState = remember { SnackbarHostState() }
-
-                // The loading screen stays for at least SPLASH_MIN_MILLIS, and until the saved login is checked.
-                var splashFinished by remember { mutableStateOf(false) }
-                LaunchedEffect(Unit) {
-                    delay(SPLASH_MIN_MILLIS)
-                    splashFinished = true
-                }
+                var showLoading by rememberSaveable { mutableStateOf(true) }
 
                 LaunchedEffect(Unit) {
                     viewModel.errorMessage.collectLatest { msg ->
@@ -127,11 +129,11 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    if (!splashFinished && uiState is AttendanceUiState.Initializing) {
+                    if (showLoading) {
                         LoadingScreen(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clickable(onClickLabel = "Skip intro") { splashFinished = true }
+                            isReady = uiState !is AttendanceUiState.Initializing,
+                            onFinished = { showLoading = false },
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
                 }
