@@ -15,6 +15,7 @@ class ExamReminderWorker(appContext: Context, params: WorkerParameters) : Corout
     override suspend fun doWork(): Result {
         val title = inputData.getString(KEY_TITLE)?.takeIf { it.isNotBlank() } ?: return Result.failure()
         val subject = inputData.getString(KEY_SUBJECT).orEmpty()
+        val lead = inputData.getString(KEY_LEAD).orEmpty()
         val examId = inputData.getString(KEY_EXAM_ID).orEmpty().hashCode()
         val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -25,8 +26,8 @@ class ExamReminderWorker(appContext: Context, params: WorkerParameters) : Corout
         val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("Upcoming exam: $title")
-            .setContentText(if (subject.isBlank()) "Your exam is scheduled soon." else subject)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(if (subject.isBlank()) "Your exam is scheduled soon." else "Your $subject exam is scheduled soon."))
+            .setContentText(reminderText(subject, lead))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(reminderText(subject, lead)))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .build()
@@ -43,6 +44,11 @@ class ExamReminderWorker(appContext: Context, params: WorkerParameters) : Corout
         const val KEY_TITLE = "exam_title"
         const val KEY_SUBJECT = "exam_subject"
         const val KEY_EXAM_ID = "exam_id"
+        const val KEY_LEAD = "exam_lead"
+        internal fun reminderText(subject: String, lead: String): String {
+            val when_ = if (lead.isBlank()) "is scheduled soon" else "starts in about $lead"
+            return if (subject.isBlank()) "Your exam $when_." else "Your $subject exam $when_."
+        }
         private const val CHANNEL_ID = "clg1_exam_reminders"
     }
 }
