@@ -29,7 +29,10 @@ import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.OnboardingScreen
 import com.example.util.configureAppCheck
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.flow.collectLatest
 
 class MainActivity : ComponentActivity() {
@@ -51,7 +54,18 @@ class MainActivity : ComponentActivity() {
                 val uiState by viewModel.uiState.collectAsStateWithLifecycle()
                 val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
                 val snackbarHostState = remember { SnackbarHostState() }
-                var showLoading by rememberSaveable { mutableStateOf(true) }
+                var showLoading by remember { mutableStateOf(true) }
+
+                val lifecycleOwner = LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner) {
+                    val observer = LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_START) {
+                            showLoading = true
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                }
 
                 LaunchedEffect(Unit) {
                     viewModel.errorMessage.collectLatest { msg ->
@@ -84,6 +98,9 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onConnectErp = { name, college, batch ->
                                             viewModel.completeOnboarding(name, college, batch, connectErp = true)
+                                        },
+                                        onSaveProfileBeforeAuth = { name, college, batch ->
+                                            viewModel.saveProfileLocally(name, college, batch)
                                         },
                                         onGoogleAuthSuccess = {
                                             viewModel.handleGoogleAuthSuccess()

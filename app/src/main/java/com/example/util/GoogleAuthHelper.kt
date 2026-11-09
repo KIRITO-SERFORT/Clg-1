@@ -60,10 +60,16 @@ object GoogleAuthHelper {
         onAuthCancelled: () -> Unit = {}
     ) {
         val clientId = try {
-            context.getString(R.string.default_web_client_id)
-        } catch (e: Exception) {
-            onAuthError("Google Sign-In configuration missing: default_web_client_id not found")
-            return
+            val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+            if (resId != 0) {
+                context.getString(resId)
+            } else {
+                context.getString(R.string.default_web_client_id)
+            }
+        } catch (_: Exception) {
+            "113754694683-ch98q2fj97im5baj2lj0qt3ooq7q7per.apps.googleusercontent.com"
+        }.ifBlank {
+            "113754694683-ch98q2fj97im5baj2lj0qt3ooq7q7per.apps.googleusercontent.com"
         }
 
         val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()

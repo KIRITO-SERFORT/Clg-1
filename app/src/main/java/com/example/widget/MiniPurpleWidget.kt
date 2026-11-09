@@ -148,7 +148,7 @@ class MiniPurpleWidget : GlanceAppWidget() {
 
         // ---- logo in a gold ring ----
         if (wide) {
-            val logo = BitmapFactory.decodeResource(context.resources, R.drawable.app_logo_small)
+            val logo = BitmapFactory.decodeResource(context.resources, R.drawable.clg1_logo)
             if (logo != null) {
                 val d = minOf(h * 0.62f, 46f * unit)
                 val shader = BitmapShader(logo, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)

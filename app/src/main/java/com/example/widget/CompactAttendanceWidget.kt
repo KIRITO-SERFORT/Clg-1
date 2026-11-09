@@ -83,7 +83,7 @@ class CompactAttendanceWidget : GlanceAppWidget() {
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Image(
-                        provider = ImageProvider(R.drawable.app_logo),
+                        provider = ImageProvider(R.drawable.clg1_logo),
                         contentDescription = "Logo",
                         modifier = GlanceModifier.size(36.dp).cornerRadius(8.dp)
                     )

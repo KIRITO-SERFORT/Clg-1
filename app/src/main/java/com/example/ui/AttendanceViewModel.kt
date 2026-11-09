@@ -174,6 +174,12 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    fun saveProfileLocally(name: String, college: String, batch: String) {
+        viewModelScope.launch {
+            repository.saveUserProfile(name, college, batch)
+        }
+    }
+
     fun handleGoogleAuthSuccess() {
         viewModelScope.launch {
             try {
@@ -193,6 +199,13 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                     val localBatch = repository.batchFlow.first()
                     if (localName.isNotBlank() && localCollege.isNotBlank()) {
                         firestoreRepo.saveProfile(localName, localCollege, localBatch)
+                        repository.setOnboardingCompleted(true)
+                        val creds = repository.getSavedCredentials()
+                        if (creds == null) {
+                            enterDirectWorkspace(localName, localCollege, localBatch)
+                        } else {
+                            checkSavedSession()
+                        }
                     }
                 }
             } catch (e: Exception) {

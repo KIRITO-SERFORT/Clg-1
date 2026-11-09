@@ -268,7 +268,7 @@ private fun RoyalLoading(modifier: Modifier) {
                 }
 
                 Image(
-                    painter = painterResource(id = R.drawable.app_logo),
+                    painter = painterResource(id = R.drawable.clg1_logo),
                     contentDescription = "Clg 1% logo",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier

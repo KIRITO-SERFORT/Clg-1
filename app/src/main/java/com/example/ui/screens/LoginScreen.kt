@@ -109,7 +109,7 @@ fun LoginScreen(
             ) {
                 // College Embellishment Header Logo
                 Image(
-                    painter = painterResource(id = R.drawable.app_logo),
+                    painter = painterResource(id = R.drawable.clg1_logo),
                     contentDescription = "Clg 1% logo",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
@@ -117,7 +117,7 @@ fun LoginScreen(
                         .clip(RoundedCornerShape(22.dp))
                         .border(
                             2.dp,
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
                             RoundedCornerShape(22.dp)
                         )
                 )

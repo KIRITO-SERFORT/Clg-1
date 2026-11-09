@@ -102,6 +102,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -293,7 +294,7 @@ fun LoadingScreen(
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(280.dp)) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(240.dp)) {
                 if (!reduceMotion) Canvas(Modifier.fillMaxSize()) {   // pulsing glow rings
                     for (k in 0..1) {
                         val t = (pulse + k * 0.5f) % 1f
@@ -304,8 +305,13 @@ fun LoadingScreen(
                     }
                 }
                 Image(                                                // logo + diagonal shine sweep
-                    painter = painterResource(R.drawable.clg1_logo), contentDescription = null,
-                    modifier = Modifier.fillMaxSize().scale(logoScale.value).alpha(logoAlpha.value)
+                    painter = painterResource(R.drawable.clg1_logo),
+                    contentDescription = "Clg 1% Logo",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .size(190.dp)
+                        .scale(logoScale.value)
+                        .alpha(logoAlpha.value)
                         .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                         .drawWithContent {
                             drawContent()
@@ -322,7 +328,22 @@ fun LoadingScreen(
                         }
                 )
             }
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(18.dp))
+            Text(
+                text = "Clg 1%",
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.sp
+                ),
+                color = Color.White
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Loading academic workspace...",
+                style = MaterialTheme.typography.bodySmall,
+                color = ClgColors.TextMuted
+            )
+            Spacer(Modifier.height(16.dp))
             Box(Modifier.width(180.dp).height(4.dp).alpha(barAlpha.value)) {
                 Canvas(Modifier.fillMaxSize()) {
                     val r = CornerRadius(size.height / 2)

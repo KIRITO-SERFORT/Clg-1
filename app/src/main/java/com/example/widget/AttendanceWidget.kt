@@ -128,7 +128,7 @@ class AttendanceWidget : GlanceAppWidget() {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Image(
-                            provider = ImageProvider(R.drawable.app_logo),
+                            provider = ImageProvider(R.drawable.clg1_logo),
                             contentDescription = "Logo",
                             modifier = GlanceModifier.size(24.dp).cornerRadius(6.dp)
                         )

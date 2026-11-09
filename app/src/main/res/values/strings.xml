@@ -5,4 +5,5 @@
     <string name="mini_purple_widget_name">Clg 1% Royal Mini</string>
     <string name="login_title">Clg 1%</string>
     <string name="login_subtitle">Sign in with your College ERP Portal (Optional)</string>
+    <string name="default_web_client_id" translatable="false">113754694683-ch98q2fj97im5baj2lj0qt3ooq7q7per.apps.googleusercontent.com</string>
 </resources>
