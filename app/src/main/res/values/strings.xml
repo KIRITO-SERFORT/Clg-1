@@ -5,4 +5,6 @@
     <string name="mini_purple_widget_name">Clg 1% Royal Mini</string>
     <string name="login_title">Clg 1%</string>
     <string name="login_subtitle">Sign in with your College ERP Portal (Optional)</string>
+    <!-- Placeholder for Google Sign-In. Replace with real web client ID from Firebase console when enabling Google auth. -->
+    <string name="default_web_client_id" translatable="false">000000000000-placeholder.apps.googleusercontent.com</string>
 </resources>
