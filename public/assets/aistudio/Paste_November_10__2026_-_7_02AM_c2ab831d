@@ -1,0 +1,1020 @@
+From 049ed888fce0c02f1955dd5d06a52cf4faa7422e Mon Sep 17 00:00:00 2001
+From: claude <c@x>
+Date: Tue, 10 Nov 2026 01:29:21 +0000
+Subject: [PATCH] Add standalone CGPA calculator (subjects / SGPAs / target)
+ with tests
+
+---
+ .../com/example/data/preferences/CgpaStore.kt |  69 ++++
+ .../java/com/example/domain/CgpaCalculator.kt | 134 ++++++++
+ .../java/com/example/domain/CgpaUiModel.kt    | 109 ++++++
+ .../main/java/com/example/ui/CgpaViewModel.kt |  28 ++
+ .../ui/screens/CgpaCalculatorScreen.kt        | 309 ++++++++++++++++++
+ .../com/example/ui/screens/DashboardScreen.kt |  29 +-
+ .../com/example/domain/CgpaCalculatorTest.kt  | 134 ++++++++
+ .../com/example/domain/CgpaEvaluatorTest.kt   |  79 +++++
+ docs/CGPA_CALCULATOR.md                       |  21 ++
+ 9 files changed, 910 insertions(+), 2 deletions(-)
+ create mode 100644 app/src/main/java/com/example/data/preferences/CgpaStore.kt
+ create mode 100644 app/src/main/java/com/example/domain/CgpaCalculator.kt
+ create mode 100644 app/src/main/java/com/example/domain/CgpaUiModel.kt
+ create mode 100644 app/src/main/java/com/example/ui/CgpaViewModel.kt
+ create mode 100644 app/src/main/java/com/example/ui/screens/CgpaCalculatorScreen.kt
+ create mode 100644 app/src/test/java/com/example/domain/CgpaCalculatorTest.kt
+ create mode 100644 app/src/test/java/com/example/domain/CgpaEvaluatorTest.kt
+ create mode 100644 docs/CGPA_CALCULATOR.md
+
+diff --git a/app/src/main/java/com/example/data/preferences/CgpaStore.kt b/app/src/main/java/com/example/data/preferences/CgpaStore.kt
+new file mode 100644
+index 0000000..269cbfc
+--- /dev/null
++++ b/app/src/main/java/com/example/data/preferences/CgpaStore.kt
+@@ -0,0 +1,69 @@
++package com.example.data.preferences
++
++import android.content.Context
++import com.example.domain.CgpaRounding
++import com.example.domain.CgpaUiState
++import com.example.domain.GradeRow
++import com.example.domain.QuickRow
++import com.example.domain.SemesterBlock
++import com.example.domain.SubjectRow
++import com.example.domain.TargetInputs
++import org.json.JSONArray
++import org.json.JSONObject
++
++/**
++ * Keeps the calculator's inputs on this phone (SharedPreferences, never uploaded). Reading is defensive:
++ * a damaged or older value falls back to the defaults instead of crashing the screen.
++ */
++object CgpaStore {
++    private const val PREFS = "clg1_cgpa_calculator"
++    private const val KEY = "state_v1"
++
++    fun load(context: Context): CgpaUiState {
++        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null) ?: return CgpaUiState()
++        return runCatching { decode(JSONObject(raw)) }.getOrDefault(CgpaUiState())
++    }
++
++    fun save(context: Context, state: CgpaUiState) {
++        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, encode(state).toString()).apply()
++    }
++
++    fun clear(context: Context) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY).apply() }
++
++    private fun encode(s: CgpaUiState) = JSONObject().apply {
++        put("mode", s.mode); put("scaleName", s.scaleName)
++        put("grades", JSONArray().apply { s.grades.forEach { put(JSONObject().put("id", it.id).put("label", it.label).put("point", it.point)) } })
++        put("semesters", JSONArray().apply {
++            s.semesters.forEach { sem ->
++                put(JSONObject().put("id", sem.id).put("name", sem.name).put("subjects", JSONArray().apply {
++                    sem.subjects.forEach { r -> put(JSONObject().put("id", r.id).put("name", r.name).put("credits", r.credits).put("grade", r.grade).put("counts", r.counts)) }
++                }))
++            }
++        })
++        put("quick", JSONArray().apply { s.quick.forEach { put(JSONObject().put("id", it.id).put("name", it.name).put("sgpa", it.sgpa).put("credits", it.credits)) } })
++        put("equalWeights", s.equalWeights); put("roundSgpaFirst", s.roundSgpaFirst)
++        put("rounding", s.rounding.name); put("places", s.places); put("factor", s.factor)
++        put("target", JSONObject().put("current", s.target.current).put("done", s.target.done).put("remaining", s.target.remaining).put("target", s.target.target))
++    }
++
++    private fun decode(o: JSONObject): CgpaUiState {
++        val d = CgpaUiState()
++        fun arr(a: JSONArray?) = (0 until (a?.length() ?: 0)).map { a!!.getJSONObject(it) }
++        val t = o.optJSONObject("target")
++        return CgpaUiState(
++            mode = o.optInt("mode", 0).coerceIn(0, 2),
++            scaleName = o.optString("scaleName", d.scaleName),
++            grades = arr(o.optJSONArray("grades")).map { GradeRow(it.optString("id"), it.optString("label"), it.optString("point")) }.ifEmpty { d.grades },
++            semesters = arr(o.optJSONArray("semesters")).map { sem ->
++                SemesterBlock(sem.optString("id"), sem.optString("name"), arr(sem.optJSONArray("subjects")).map {
++                    SubjectRow(it.optString("id"), it.optString("name"), it.optString("credits"), it.optString("grade"), it.optBoolean("counts", true))
++                })
++            }.ifEmpty { d.semesters },
++            quick = arr(o.optJSONArray("quick")).map { QuickRow(it.optString("id"), it.optString("name"), it.optString("sgpa"), it.optString("credits")) }.ifEmpty { d.quick },
++            equalWeights = o.optBoolean("equalWeights", false), roundSgpaFirst = o.optBoolean("roundSgpaFirst", false),
++            rounding = runCatching { CgpaRounding.valueOf(o.optString("rounding")) }.getOrDefault(CgpaRounding.HALF_UP),
++            places = o.optInt("places", 2).coerceIn(0, 4), factor = o.optString("factor", ""),
++            target = TargetInputs(t?.optString("current") ?: "", t?.optString("done") ?: "", t?.optString("remaining") ?: "", t?.optString("target") ?: "")
++        )
++    }
++}
+diff --git a/app/src/main/java/com/example/domain/CgpaCalculator.kt b/app/src/main/java/com/example/domain/CgpaCalculator.kt
+new file mode 100644
+index 0000000..1587277
+--- /dev/null
++++ b/app/src/main/java/com/example/domain/CgpaCalculator.kt
+@@ -0,0 +1,134 @@
++package com.example.domain
++
++import java.math.BigDecimal
++import java.math.RoundingMode
++
++/**
++ * Standalone SGPA / CGPA maths. Pure Kotlin (no Android types) so it is unit tested on a JVM.
++ * All arithmetic is exact BigDecimal; rounding happens ONCE at the end, with the rounding rule the student picks,
++ * because universities differ (round half up, round half even, or simply cut the digits off).
++ * Nothing here assumes one university's formula: grade scales, the percentage factor and the
++ * "round SGPA first?" behaviour are all inputs.
++ */
++
++enum class CgpaRounding(val label: String, val mode: RoundingMode) {
++    HALF_UP("Round half up (8.125 becomes 8.13)", RoundingMode.HALF_UP),
++    HALF_EVEN("Round half to even (8.125 becomes 8.12)", RoundingMode.HALF_EVEN),
++    TRUNCATE("Cut off the extra digits (8.129 becomes 8.12)", RoundingMode.DOWN)
++}
++
++data class GradeEntry(val label: String, val point: BigDecimal)
++
++data class GradeScale(val name: String, val entries: List<GradeEntry>) {
++    val maxPoint: BigDecimal get() = entries.maxOfOrNull { it.point } ?: BigDecimal.ZERO
++    fun pointOf(label: String): BigDecimal? = entries.firstOrNull { it.label.equals(label.trim(), ignoreCase = true) }?.point
++}
++
++/** Common examples only. Every college differs: the student can edit or build their own scale. */
++object GradeScales {
++    private fun e(l: String, p: String) = GradeEntry(l, BigDecimal(p))
++    val TEN_POINT_U = GradeScale("O / A+ / A / B+ / B / C / U (0-10)", listOf(e("O", "10"), e("A+", "9"), e("A", "8"), e("B+", "7"), e("B", "6"), e("C", "5"), e("U", "0")))
++    val TEN_POINT_PF = GradeScale("O / A+ / A / B+ / B / C / P / F (0-10)", listOf(e("O", "10"), e("A+", "9"), e("A", "8"), e("B+", "7"), e("B", "6"), e("C", "5"), e("P", "4"), e("F", "0")))
++    val FOUR_POINT = GradeScale("A / B / C / D / F (0-4)", listOf(e("A", "4"), e("B", "3"), e("C", "2"), e("D", "1"), e("F", "0")))
++    val PRESETS = listOf(TEN_POINT_U, TEN_POINT_PF, FOUR_POINT)
++}
++
++data class CalcSubject(val name: String, val credits: BigDecimal, val gradePoint: BigDecimal, val counts: Boolean = true)
++data class CalcSemester(val name: String, val subjects: List<CalcSubject>)
++data class QuickSemester(val name: String, val sgpa: BigDecimal, val credits: BigDecimal?)
++
++data class SemesterResult(val name: String, val sgpa: BigDecimal?, val credits: BigDecimal, val points: BigDecimal)
++
++data class CgpaResult(
++    val cgpa: BigDecimal?, val totalCredits: BigDecimal, val semesters: List<SemesterResult>, val note: String?
++)
++
++data class TargetResult(val feasible: Boolean, val requiredAverage: BigDecimal?, val bestReachableCgpa: BigDecimal?, val closestGrade: String?, val message: String)
++
++object CgpaCalc {
++    const val MAX_CREDITS_PER_SUBJECT = 40
++
++    private fun div(a: BigDecimal, b: BigDecimal, places: Int, r: CgpaRounding): BigDecimal =
++        a.divide(b, places, r.mode)
++
++    /** Credit-weighted SGPA of one semester: sum(credit x point) / sum(credit). Subjects with counts=false are skipped. */
++    fun sgpa(subjects: List<CalcSubject>, places: Int = 2, rounding: CgpaRounding = CgpaRounding.HALF_UP): SemesterResult {
++        val used = subjects.filter { it.counts }
++        val credits = used.fold(BigDecimal.ZERO) { a, s -> a + s.credits }
++        val points = used.fold(BigDecimal.ZERO) { a, s -> a + s.credits * s.gradePoint }
++        val value = if (credits.signum() == 0) null else div(points, credits, places, rounding)
++        return SemesterResult("", value, credits, points)
++    }
++
++    /**
++     * CGPA from subject-level data: sum(credit x point) over ALL semesters / sum(credits).
++     * [roundSgpaFirst] mimics universities that publish a rounded SGPA per semester and then weight THOSE by the
++     * semester's credits; the answer can differ slightly from the exact method, so it is a choice, not a default.
++     */
++    fun cgpaFromSubjects(
++        semesters: List<CalcSemester>, places: Int = 2, rounding: CgpaRounding = CgpaRounding.HALF_UP, roundSgpaFirst: Boolean = false
++    ): CgpaResult {
++        val per = semesters.map { sem -> sgpa(sem.subjects, places, rounding).copy(name = sem.name) }
++        val totalCredits = per.fold(BigDecimal.ZERO) { a, s -> a + s.credits }
++        if (totalCredits.signum() == 0) return CgpaResult(null, BigDecimal.ZERO, per, "Add at least one subject with credits.")
++        val points = if (roundSgpaFirst) per.fold(BigDecimal.ZERO) { a, s -> a + (s.sgpa ?: BigDecimal.ZERO) * s.credits }
++        else per.fold(BigDecimal.ZERO) { a, s -> a + s.points }
++        return CgpaResult(div(points, totalCredits, places, rounding), totalCredits, per, null)
++    }
++
++    /**
++     * CGPA from published SGPAs. With credits: credit-weighted. Without credits (or if [equalWeights]): plain average,
++     * which is only right when every semester has the same credits, so the note says so.
++     */
++    fun cgpaFromSgpa(items: List<QuickSemester>, equalWeights: Boolean, places: Int = 2, rounding: CgpaRounding = CgpaRounding.HALF_UP): CgpaResult {
++        if (items.isEmpty()) return CgpaResult(null, BigDecimal.ZERO, emptyList(), "Add at least one semester.")
++        val useCredits = !equalWeights && items.all { it.credits != null && it.credits.signum() > 0 }
++        val per = items.map { SemesterResult(it.name, it.sgpa, it.credits ?: BigDecimal.ZERO, it.sgpa * (it.credits ?: BigDecimal.ZERO)) }
++        return if (useCredits) {
++            val credits = per.fold(BigDecimal.ZERO) { a, s -> a + s.credits }
++            val points = per.fold(BigDecimal.ZERO) { a, s -> a + s.points }
++            CgpaResult(div(points, credits, places, rounding), credits, per, null)
++        } else {
++            val sum = items.fold(BigDecimal.ZERO) { a, s -> a + s.sgpa }
++            CgpaResult(div(sum, BigDecimal(items.size), places, rounding), per.fold(BigDecimal.ZERO) { a, s -> a + s.credits }, per,
++                "Plain average of the SGPAs. This matches your university only if every semester has the same credits.")
++        }
++    }
++
++    /** Percentage = CGPA x factor, using the factor the student's university publishes. No factor means no percentage. */
++    fun percentage(cgpa: BigDecimal?, factor: BigDecimal?, places: Int = 2, rounding: CgpaRounding = CgpaRounding.HALF_UP): BigDecimal? =
++        if (cgpa == null || factor == null || factor.signum() <= 0) null else (cgpa * factor).setScale(places, rounding.mode)
++
++    /**
++     * Average grade point you need over the remaining credits to reach [target].
++     * required = (target x (done + remaining) - current x done) / remaining
++     */
++    fun requiredAverage(
++        currentCgpa: BigDecimal, creditsDone: BigDecimal, creditsRemaining: BigDecimal, target: BigDecimal,
++        scale: GradeScale, places: Int = 2
++    ): TargetResult {
++        if (creditsRemaining.signum() <= 0) return TargetResult(false, null, null, null, "Enter the credits you still have to take.")
++        if (creditsDone.signum() < 0) return TargetResult(false, null, null, null, "Credits done cannot be negative.")
++        val max = scale.maxPoint
++        val total = creditsDone + creditsRemaining
++        val needed = (target * total - currentCgpa * creditsDone).divide(creditsRemaining, 10, RoundingMode.HALF_UP)
++        val best = (currentCgpa * creditsDone + max * creditsRemaining).divide(total, places, RoundingMode.DOWN)
++        if (needed.signum() <= 0) return TargetResult(true, BigDecimal.ZERO, best, null, "Already secured: even a 0 average on the remaining credits keeps you at or above ${target.stripTrailingZeros().toPlainString()}.")
++        if (needed > max) return TargetResult(false, needed.setScale(places, RoundingMode.UP), best, null,
++            "Not reachable: you would need an average of ${needed.setScale(places, RoundingMode.UP).toPlainString()} but the highest grade point is ${max.stripTrailingZeros().toPlainString()}. The best you can reach is ${best.toPlainString()}.")
++        val grade = scale.entries.filter { it.point >= needed }.minByOrNull { it.point }
++        val req = needed.setScale(places, RoundingMode.UP)
++        return TargetResult(true, req, best, grade?.label,
++            "You need an average grade point of at least ${req.toPlainString()} on the remaining ${creditsRemaining.stripTrailingZeros().toPlainString()} credits" +
++                (grade?.let { " (about ${it.label} in every subject)" } ?: "") + ". This is arithmetic, not a prediction.")
++    }
++
++    /** Parses a credit or point typed by the student; null when empty or invalid. Accepts a comma as the decimal mark. */
++    fun parseNumber(text: String): BigDecimal? {
++        val t = text.trim().replace(',', '.')
++        if (t.isEmpty() || t.length > 8 || !t.all { it.isDigit() || it == '.' } || t.count { it == '.' } > 1) return null
++        return t.toBigDecimalOrNull()
++    }
++
++    fun validCredits(c: BigDecimal?) = c != null && c.signum() > 0 && c <= BigDecimal(MAX_CREDITS_PER_SUBJECT)
++}
+diff --git a/app/src/main/java/com/example/domain/CgpaUiModel.kt b/app/src/main/java/com/example/domain/CgpaUiModel.kt
+new file mode 100644
+index 0000000..9a835f9
+--- /dev/null
++++ b/app/src/main/java/com/example/domain/CgpaUiModel.kt
+@@ -0,0 +1,109 @@
++package com.example.domain
++
++import java.math.BigDecimal
++
++/** Editable state of the CGPA calculator screen (all numbers are the raw text the student typed). Pure Kotlin. */
++data class SubjectRow(val id: String, val name: String = "", val credits: String = "", val grade: String = "", val counts: Boolean = true)
++data class SemesterBlock(val id: String, val name: String, val subjects: List<SubjectRow>)
++data class QuickRow(val id: String, val name: String, val sgpa: String = "", val credits: String = "")
++data class GradeRow(val id: String, val label: String, val point: String)
++data class TargetInputs(val current: String = "", val done: String = "", val remaining: String = "", val target: String = "")
++
++data class CgpaUiState(
++    val mode: Int = 0,                                   // 0 = by subjects, 1 = quick (SGPAs), 2 = target
++    val scaleName: String = GradeScales.TEN_POINT_U.name,
++    val grades: List<GradeRow> = gradeRowsOf(GradeScales.TEN_POINT_U),
++    val semesters: List<SemesterBlock> = listOf(SemesterBlock("s1", "Semester 1", listOf(SubjectRow("r1"), SubjectRow("r2"), SubjectRow("r3")))),
++    val quick: List<QuickRow> = listOf(QuickRow("q1", "Semester 1")),
++    val equalWeights: Boolean = false,
++    val roundSgpaFirst: Boolean = false,
++    val rounding: CgpaRounding = CgpaRounding.HALF_UP,
++    val places: Int = 2,
++    val factor: String = "",
++    val target: TargetInputs = TargetInputs()
++)
++
++fun gradeRowsOf(scale: GradeScale) = scale.entries.mapIndexed { i, e -> GradeRow("g$i", e.label, e.point.stripTrailingZeros().toPlainString()) }
++
++data class Evaluation(
++    val scale: GradeScale,
++    val subjects: CgpaResult,
++    val quick: CgpaResult,
++    val target: TargetResult?,
++    val percent: BigDecimal?,
++    /** Row id -> why that row is NOT counted. Rows are never dropped silently. */
++    val rowIssues: Map<String, String>,
++    val warnings: List<String>,
++    val prefillCurrent: BigDecimal?,
++    val prefillCredits: BigDecimal?
++)
++
++object CgpaEvaluator {
++    fun scaleOf(s: CgpaUiState): Pair<GradeScale, List<String>> {
++        val warns = ArrayList<String>()
++        val entries = s.grades.mapNotNull { g ->
++            val p = CgpaCalc.parseNumber(g.point)
++            if (g.label.isBlank() && g.point.isBlank()) null
++            else if (g.label.isBlank() || p == null) { warns += "A grade in your scale is incomplete (needs a label and a point), so it is ignored."; null }
++            else GradeEntry(g.label.trim(), p)
++        }
++        val dupes = entries.map { it.label.lowercase() }.let { it.size - it.toSet().size }
++        if (dupes > 0) warns += "Two grades share a label; the first one is used."
++        return GradeScale(s.scaleName, entries) to warns
++    }
++
++    private fun isBlank(r: SubjectRow) = r.name.isBlank() && r.credits.isBlank() && r.grade.isBlank()
++
++    fun evaluate(s: CgpaUiState): Evaluation {
++        val (scale, scaleWarns) = scaleOf(s)
++        val warnings = ArrayList(scaleWarns)
++        val issues = HashMap<String, String>()      // rows of the tab the student is looking at
++        val hiddenIssues = HashMap<String, String>()  // rows of the other tab: kept out of the warnings
++
++        val sems = s.semesters.map { sem ->
++            val subs = sem.subjects.mapNotNull { r ->
++                if (isBlank(r)) return@mapNotNull null
++                val credits = CgpaCalc.parseNumber(r.credits)
++                val gp = scale.pointOf(r.grade)
++                when {
++                    !CgpaCalc.validCredits(credits) -> { (if (s.mode == 1) hiddenIssues else issues)[r.id] = "Credits must be a number above 0 and at most ${CgpaCalc.MAX_CREDITS_PER_SUBJECT}."; null }
++                    gp == null -> { (if (s.mode == 1) hiddenIssues else issues)[r.id] = if (r.grade.isBlank()) "Pick a grade." else "Grade \"${r.grade}\" is not in your scale."; null }
++                    else -> CalcSubject(r.name.ifBlank { "Subject" }, credits!!, gp, r.counts)
++                }
++            }
++            CalcSemester(sem.name.ifBlank { "Semester" }, subs)
++        }
++        val subjectsResult = CgpaCalc.cgpaFromSubjects(sems, s.places, s.rounding, s.roundSgpaFirst)
++
++        val quickItems = s.quick.mapNotNull { r ->
++            // a name alone (the pre-filled "Semester 1") is not data
++            if (r.sgpa.isBlank() && r.credits.isBlank()) return@mapNotNull null
++            val sg = CgpaCalc.parseNumber(r.sgpa)
++            val cr = if (r.credits.isBlank()) null else CgpaCalc.parseNumber(r.credits)
++            when {
++                sg == null || sg > scale.maxPoint -> { (if (s.mode == 1) issues else hiddenIssues)[r.id] = "SGPA must be a number from 0 to ${scale.maxPoint.stripTrailingZeros().toPlainString()}."; null }
++                r.credits.isNotBlank() && !(cr != null && cr.signum() > 0 && cr <= BigDecimal(2000)) -> { (if (s.mode == 1) issues else hiddenIssues)[r.id] = "Credits must be a number above 0, or empty."; null }
++                else -> QuickSemester(r.name.ifBlank { "Semester" }, sg, cr)
++            }
++        }
++        val quickResult = CgpaCalc.cgpaFromSgpa(quickItems, s.equalWeights, s.places, s.rounding)
++
++        val skipped = issues.size
++        if (skipped > 0) warnings += "$skipped row(s) are incomplete or invalid and are NOT counted. Fix them to include them."
++
++        val factor = CgpaCalc.parseNumber(s.factor)
++        if (s.factor.isNotBlank() && factor == null) warnings += "The percentage factor is not a valid number, so no percentage is shown."
++        val shown = if (s.mode == 1) quickResult else subjectsResult
++        val percent = CgpaCalc.percentage(shown.cgpa, factor, 2, s.rounding)
++
++        val t = s.target
++        val target = run {
++            val cur = CgpaCalc.parseNumber(t.current); val done = CgpaCalc.parseNumber(t.done)
++            val rem = CgpaCalc.parseNumber(t.remaining); val goal = CgpaCalc.parseNumber(t.target)
++            if (cur == null || done == null || rem == null || goal == null) null
++            else if (cur > scale.maxPoint || goal > scale.maxPoint) TargetResult(false, null, null, null, "Current and target CGPA cannot be higher than the top grade point (${scale.maxPoint.stripTrailingZeros().toPlainString()}).")
++            else CgpaCalc.requiredAverage(cur, done, rem, goal, scale, s.places)
++        }
++        return Evaluation(scale, subjectsResult, quickResult, target, percent, issues, warnings, shown.cgpa, shown.totalCredits.takeIf { it.signum() > 0 })
++    }
++}
+diff --git a/app/src/main/java/com/example/ui/CgpaViewModel.kt b/app/src/main/java/com/example/ui/CgpaViewModel.kt
+new file mode 100644
+index 0000000..66da0b9
+--- /dev/null
++++ b/app/src/main/java/com/example/ui/CgpaViewModel.kt
+@@ -0,0 +1,28 @@
++package com.example.ui
++
++import android.app.Application
++import androidx.lifecycle.AndroidViewModel
++import com.example.data.preferences.CgpaStore
++import com.example.domain.CgpaUiState
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.flow.update
++
++/** Holds the calculator inputs and saves them on this phone after every change. */
++class CgpaViewModel(app: Application) : AndroidViewModel(app) {
++    private val _state = MutableStateFlow(CgpaStore.load(app))
++    val state: StateFlow<CgpaUiState> = _state.asStateFlow()
++
++    fun edit(transform: (CgpaUiState) -> CgpaUiState) {
++        _state.update(transform)
++        CgpaStore.save(getApplication(), _state.value)
++    }
++
++    fun resetAll() {
++        CgpaStore.clear(getApplication())
++        _state.value = CgpaUiState()
++    }
++
++    fun newId(): String = java.lang.Long.toString(System.nanoTime(), 36)
++}
+diff --git a/app/src/main/java/com/example/ui/screens/CgpaCalculatorScreen.kt b/app/src/main/java/com/example/ui/screens/CgpaCalculatorScreen.kt
+new file mode 100644
+index 0000000..89c12b1
+--- /dev/null
++++ b/app/src/main/java/com/example/ui/screens/CgpaCalculatorScreen.kt
+@@ -0,0 +1,309 @@
++package com.example.ui.screens
++
++import androidx.compose.foundation.horizontalScroll
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.width
++import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.foundation.text.KeyboardOptions
++import androidx.compose.foundation.verticalScroll
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.Add
++import androidx.compose.material.icons.filled.ArrowBack
++import androidx.compose.material.icons.filled.Delete
++import androidx.compose.material3.AlertDialog
++import androidx.compose.material3.Button
++import androidx.compose.material3.Card
++import androidx.compose.material3.CardDefaults
++import androidx.compose.material3.Checkbox
++import androidx.compose.material3.ExperimentalMaterial3Api
++import androidx.compose.material3.FilterChip
++import androidx.compose.material3.Icon
++import androidx.compose.material3.IconButton
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.OutlinedButton
++import androidx.compose.material3.OutlinedTextField
++import androidx.compose.material3.Scaffold
++import androidx.compose.material3.Switch
++import androidx.compose.material3.Tab
++import androidx.compose.material3.TabRow
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.material3.TopAppBar
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.platform.testTag
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.text.input.KeyboardType
++import androidx.compose.ui.unit.dp
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import androidx.lifecycle.viewmodel.compose.viewModel
++import com.example.domain.CgpaEvaluator
++import com.example.domain.CgpaRounding
++import com.example.domain.CgpaUiState
++import com.example.domain.Evaluation
++import com.example.domain.GradeRow
++import com.example.domain.GradeScales
++import com.example.domain.QuickRow
++import com.example.domain.SemesterBlock
++import com.example.domain.SubjectRow
++import com.example.domain.gradeRowsOf
++import com.example.ui.CgpaViewModel
++
++private val MODES = listOf("By subjects", "From SGPAs", "Target")
++
++/** Full-screen CGPA calculator. Works for any college: nothing needs the ERP, an account or the academic setup. */
++@OptIn(ExperimentalMaterial3Api::class)
++@Composable
++fun CgpaCalculatorScreen(onClose: () -> Unit, vm: CgpaViewModel = viewModel()) {
++    val state by vm.state.collectAsStateWithLifecycle()
++    val eval = remember(state) { CgpaEvaluator.evaluate(state) }
++
++    Scaffold(topBar = {
++        TopAppBar(
++            title = { Text("CGPA Calculator") },
++            navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.Default.ArrowBack, contentDescription = "Close calculator") } }
++        )
++    }) { pad ->
++        Column(
++            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
++            verticalArrangement = Arrangement.spacedBy(12.dp)
++        ) {
++            ResultCard(state, eval)
++            TabRow(selectedTabIndex = state.mode) {
++                MODES.forEachIndexed { i, t -> Tab(selected = state.mode == i, onClick = { vm.edit { it.copy(mode = i) } }, text = { Text(t, maxLines = 1) }) }
++            }
++            when (state.mode) {
++                0 -> SubjectsMode(state, eval, vm)
++                1 -> QuickMode(state, eval, vm)
++                else -> TargetMode(state, eval, vm)
++            }
++            SettingsCard(state, vm)
++            Text("Results are calculated on this phone from what you type. Check them against your university's official result.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
++            Spacer(Modifier.height(24.dp))
++        }
++    }
++}
++
++@Composable
++private fun NumField(label: String, value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, supporting: String? = null, isError: Boolean = false) {
++    OutlinedTextField(
++        value = value, onValueChange = { if (it.length <= 8) onChange(it) }, label = { Text(label, maxLines = 1) }, singleLine = true, isError = isError,
++        supportingText = supporting?.let { { Text(it) } },
++        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = modifier
++    )
++}
++
++@Composable
++private fun Section(title: String, content: @Composable () -> Unit) {
++    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)), modifier = Modifier.fillMaxWidth()) {
++        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
++            if (title.isNotBlank()) Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
++            content()
++        }
++    }
++}
++
++// ------------------------------------------------------------------------------------------------ result
++
++@Composable
++private fun ResultCard(state: CgpaUiState, eval: Evaluation) {
++    val shown = if (state.mode == 1) eval.quick else eval.subjects
++    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), modifier = Modifier.fillMaxWidth()) {
++        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
++            Text("YOUR CGPA", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
++            Text(shown.cgpa?.toPlainString() ?: "\u2014", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.ExtraBold,
++                color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.testTag("cgpa_value"))
++            val credits = shown.totalCredits.stripTrailingZeros().toPlainString()
++            Text(buildString {
++                append(if (shown.totalCredits.signum() > 0) "$credits credits counted" else "Enter your semesters below")
++                eval.percent?.let { append("  \u00B7  about ${it.toPlainString()}%") }
++            }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
++            shown.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer) }
++            eval.warnings.forEach { Text("Note: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
++        }
++    }
++}
++
++// ------------------------------------------------------------------------------------------------ by subjects
++
++@Composable
++private fun SubjectsMode(state: CgpaUiState, eval: Evaluation, vm: CgpaViewModel) {
++    state.semesters.forEachIndexed { si, sem ->
++        var confirm by remember { mutableStateOf(false) }
++        if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("Remove ${sem.name.ifBlank { "semester" }}?" ) },
++            text = { Text("Its subjects are removed from the calculator.") },
++            confirmButton = { TextButton(onClick = { confirm = false; vm.edit { s -> s.copy(semesters = s.semesters.filter { it.id != sem.id }) } }) { Text("Remove") } },
++            dismissButton = { TextButton(onClick = { confirm = false }) { Text("Keep") } })
++
++        Section("") {
++            Row(verticalAlignment = Alignment.CenterVertically) {
++                OutlinedTextField(sem.name, { v -> vm.edit { s -> s.copy(semesters = s.semesters.map { if (it.id == sem.id) it.copy(name = v.take(40)) else it }) } },
++                    label = { Text("Semester name") }, singleLine = true, modifier = Modifier.weight(1f))
++                IconButton(onClick = { confirm = true }) { Icon(Icons.Default.Delete, contentDescription = "Remove ${sem.name}") }
++            }
++            sem.subjects.forEach { r -> SubjectRowUi(state, eval, sem, r, vm) }
++            val semResult = eval.subjects.semesters.getOrNull(si)
++            Row(verticalAlignment = Alignment.CenterVertically) {
++                OutlinedButton(onClick = { vm.edit { s -> s.copy(semesters = s.semesters.map { if (it.id == sem.id) it.copy(subjects = it.subjects + SubjectRow(vm.newId())) else it }) } }) {
++                    Icon(Icons.Default.Add, contentDescription = null); Text("Add subject")
++                }
++                Spacer(Modifier.weight(1f))
++                Text("SGPA: ${semResult?.sgpa?.toPlainString() ?: "\u2014"}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
++            }
++        }
++    }
++    Button(onClick = { vm.edit { s -> s.copy(semesters = s.semesters + SemesterBlock(vm.newId(), "Semester ${s.semesters.size + 1}", listOf(SubjectRow(vm.newId()), SubjectRow(vm.newId()), SubjectRow(vm.newId())))) } },
++        modifier = Modifier.fillMaxWidth().testTag("add_semester")) { Icon(Icons.Default.Add, contentDescription = null); Text("Add semester") }
++}
++
++@Composable
++private fun SubjectRowUi(state: CgpaUiState, eval: Evaluation, sem: SemesterBlock, r: SubjectRow, vm: CgpaViewModel) {
++    fun upd(f: (SubjectRow) -> SubjectRow) = vm.edit { s -> s.copy(semesters = s.semesters.map { b -> if (b.id == sem.id) b.copy(subjects = b.subjects.map { if (it.id == r.id) f(it) else it }) else b }) }
++    val issue = eval.rowIssues[r.id]
++    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
++        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++            OutlinedTextField(r.name, { v -> upd { it.copy(name = v.take(60)) } }, label = { Text("Subject") }, singleLine = true, modifier = Modifier.weight(1f))
++            NumField("Credits", r.credits, { v -> upd { it.copy(credits = v) } }, Modifier.width(96.dp), isError = issue != null && r.credits.isNotBlank() && eval.rowIssues[r.id]!!.startsWith("Credits"))
++            IconButton(onClick = { vm.edit { s -> s.copy(semesters = s.semesters.map { b -> if (b.id == sem.id) b.copy(subjects = b.subjects.filter { it.id != r.id }) else b }) } }) {
++                Icon(Icons.Default.Delete, contentDescription = "Remove subject ${r.name}")
++            }
++        }
++        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
++            state.grades.filter { it.label.isNotBlank() }.forEach { g ->
++                FilterChip(selected = r.grade.equals(g.label, ignoreCase = true), onClick = { upd { it.copy(grade = g.label) } }, label = { Text(g.label) })
++            }
++        }
++        Row(verticalAlignment = Alignment.CenterVertically) {
++            Checkbox(checked = r.counts, onCheckedChange = { v -> upd { it.copy(counts = v) } })
++            Text("Counts toward GPA", style = MaterialTheme.typography.bodySmall)
++        }
++        if (issue != null) Text(issue, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
++    }
++}
++
++// ------------------------------------------------------------------------------------------------ quick (SGPAs)
++
++@Composable
++private fun QuickMode(state: CgpaUiState, eval: Evaluation, vm: CgpaViewModel) {
++    Section("Semester SGPAs") {
++        Text("Type the SGPA your university published for each semester. Add the semester's credits for a credit-weighted CGPA.", style = MaterialTheme.typography.bodySmall)
++        state.quick.forEach { q ->
++            fun upd(f: (QuickRow) -> QuickRow) = vm.edit { s -> s.copy(quick = s.quick.map { if (it.id == q.id) f(it) else it }) }
++            val issue = eval.rowIssues[q.id]
++            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
++                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                    OutlinedTextField(q.name, { v -> upd { it.copy(name = v.take(40)) } }, label = { Text("Semester") }, singleLine = true, modifier = Modifier.weight(1f))
++                    NumField("SGPA", q.sgpa, { v -> upd { it.copy(sgpa = v) } }, Modifier.width(88.dp))
++                    NumField("Credits", q.credits, { v -> upd { it.copy(credits = v) } }, Modifier.width(88.dp))
++                    IconButton(onClick = { vm.edit { s -> s.copy(quick = s.quick.filter { it.id != q.id }) } }) { Icon(Icons.Default.Delete, contentDescription = "Remove ${q.name}") }
++                }
++                if (issue != null) Text(issue, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
++            }
++        }
++        OutlinedButton(onClick = { vm.edit { s -> s.copy(quick = s.quick + QuickRow(vm.newId(), "Semester ${s.quick.size + 1}")) } }) { Icon(Icons.Default.Add, contentDescription = null); Text("Add semester") }
++        Row(verticalAlignment = Alignment.CenterVertically) {
++            Column(Modifier.weight(1f)) {
++                Text("Treat every semester equally", style = MaterialTheme.typography.bodyMedium)
++                Text("Ignores credits (plain average). Only right if all semesters have equal credits.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
++            }
++            Switch(checked = state.equalWeights, onCheckedChange = { v -> vm.edit { it.copy(equalWeights = v) } })
++        }
++    }
++}
++
++// ------------------------------------------------------------------------------------------------ target
++
++@Composable
++private fun TargetMode(state: CgpaUiState, eval: Evaluation, vm: CgpaViewModel) {
++    val t = state.target
++    Section("What do I need?") {
++        Text("Works out the average grade point you need in your remaining credits to reach a target CGPA.", style = MaterialTheme.typography.bodySmall)
++        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++            NumField("Current CGPA", t.current, { v -> vm.edit { it.copy(target = it.target.copy(current = v)) } }, Modifier.weight(1f))
++            NumField("Credits done", t.done, { v -> vm.edit { it.copy(target = it.target.copy(done = v)) } }, Modifier.weight(1f))
++        }
++        val cgpa = eval.prefillCurrent; val credits = eval.prefillCredits
++        if (cgpa != null && credits != null) TextButton(onClick = { vm.edit { it.copy(target = it.target.copy(current = cgpa.toPlainString(), done = credits.stripTrailingZeros().toPlainString())) } }) {
++            Text("Use my calculated CGPA (${cgpa.toPlainString()}) and ${credits.stripTrailingZeros().toPlainString()} credits")
++        }
++        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++            NumField("Credits left", t.remaining, { v -> vm.edit { it.copy(target = it.target.copy(remaining = v)) } }, Modifier.weight(1f))
++            NumField("Target CGPA", t.target, { v -> vm.edit { it.copy(target = it.target.copy(target = v)) } }, Modifier.weight(1f))
++        }
++        val r = eval.target
++        if (r == null) Text("Fill in all four numbers to see the result.", style = MaterialTheme.typography.bodySmall)
++        else {
++            Text(if (r.feasible) "Reachable" else "Not reachable", fontWeight = FontWeight.Bold, color = if (r.feasible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
++            Text(r.message)
++            r.bestReachableCgpa?.let { Text("Best possible CGPA: ${it.toPlainString()}", style = MaterialTheme.typography.bodySmall) }
++        }
++    }
++}
++
++// ------------------------------------------------------------------------------------------------ settings
++
++@Composable
++private fun SettingsCard(state: CgpaUiState, vm: CgpaViewModel) {
++    var confirmReset by remember { mutableStateOf(false) }
++    if (confirmReset) AlertDialog(onDismissRequest = { confirmReset = false }, title = { Text("Reset calculator?") },
++        text = { Text("All semesters, grades and settings in the calculator are cleared from this phone.") },
++        confirmButton = { TextButton(onClick = { confirmReset = false; vm.resetAll() }) { Text("Reset") } },
++        dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel") } })
++
++    Section("Settings: match your university") {
++        Text("Grade scale", fontWeight = FontWeight.SemiBold)
++        Text("These are common examples. Pick one and edit it to match your regulations.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
++        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
++            GradeScales.PRESETS.forEach { p -> FilterChip(selected = state.scaleName == p.name, onClick = { vm.edit { it.copy(scaleName = p.name, grades = gradeRowsOf(p)) } }, label = { Text(p.name, maxLines = 1) }) }
++        }
++        state.grades.forEach { g ->
++            fun upd(f: (GradeRow) -> GradeRow) = vm.edit { s -> s.copy(scaleName = "Custom scale", grades = s.grades.map { if (it.id == g.id) f(it) else it }) }
++            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                OutlinedTextField(g.label, { v -> upd { it.copy(label = v.take(6)) } }, label = { Text("Grade") }, singleLine = true, modifier = Modifier.weight(1f))
++                NumField("Points", g.point, { v -> upd { it.copy(point = v) } }, Modifier.weight(1f))
++                IconButton(onClick = { vm.edit { s -> s.copy(scaleName = "Custom scale", grades = s.grades.filter { it.id != g.id }) } }) { Icon(Icons.Default.Delete, contentDescription = "Remove grade ${g.label}") }
++            }
++        }
++        OutlinedButton(onClick = { vm.edit { s -> s.copy(scaleName = "Custom scale", grades = s.grades + GradeRow(vm.newId(), "", "")) } }) { Icon(Icons.Default.Add, contentDescription = null); Text("Add grade") }
++
++        Text("Rounding", fontWeight = FontWeight.SemiBold)
++        CgpaRounding.values().forEach { r ->
++            Row(verticalAlignment = Alignment.CenterVertically) {
++                androidx.compose.material3.RadioButton(selected = state.rounding == r, onClick = { vm.edit { it.copy(rounding = r) } })
++                Text(r.label, style = MaterialTheme.typography.bodyMedium)
++            }
++        }
++        Text("Decimal places", style = MaterialTheme.typography.labelLarge)
++        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { (0..4).forEach { n -> FilterChip(selected = state.places == n, onClick = { vm.edit { it.copy(places = n) } }, label = { Text("$n") }) } }
++
++        Row(verticalAlignment = Alignment.CenterVertically) {
++            Column(Modifier.weight(1f)) {
++                Text("Round each SGPA before the CGPA", style = MaterialTheme.typography.bodyMedium)
++                Text("Some universities weight the published (rounded) SGPAs. Off = exact marks are used. Subjects tab only.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
++            }
++            Switch(checked = state.roundSgpaFirst, onCheckedChange = { v -> vm.edit { it.copy(roundSgpaFirst = v) } })
++        }
++
++        Text("Percentage", fontWeight = FontWeight.SemiBold)
++        NumField("CGPA \u00D7 this number = percentage", state.factor, { v -> vm.edit { it.copy(factor = v) } }, Modifier.fillMaxWidth(),
++            supporting = "Leave empty if your university has no formula. Use the exact factor your university publishes.")
++        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
++            listOf("9.5", "10").forEach { f -> FilterChip(selected = state.factor == f, onClick = { vm.edit { it.copy(factor = f) } }, label = { Text("\u00D7$f") }) }
++            Text("examples only", style = MaterialTheme.typography.bodySmall, modifier = Modifier.align(Alignment.CenterVertically))
++        }
++        TextButton(onClick = { confirmReset = true }) { Text("Reset calculator") }
++    }
++}
+diff --git a/app/src/main/java/com/example/ui/screens/DashboardScreen.kt b/app/src/main/java/com/example/ui/screens/DashboardScreen.kt
+index bb2e239..9105cf1 100644
+--- a/app/src/main/java/com/example/ui/screens/DashboardScreen.kt
++++ b/app/src/main/java/com/example/ui/screens/DashboardScreen.kt
+@@ -178,6 +178,14 @@ fun DashboardScreen(
+ ) {
+     var selectedTab by remember { mutableStateOf(DashboardTab.OVERVIEW) }
+     var showLogoutDialog by remember { mutableStateOf(false) }
++    var showCgpa by remember { mutableStateOf(false) }
++
++    if (showCgpa) androidx.compose.ui.window.Dialog(
++        onDismissRequest = { showCgpa = false },
++        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
++    ) {
++        androidx.compose.material3.Surface(modifier = Modifier.fillMaxSize()) { CgpaCalculatorScreen(onClose = { showCgpa = false }) }
++    }
+ 
+     if (showLogoutDialog) {
+         AlertDialog(
+@@ -324,7 +332,8 @@ fun DashboardScreen(
+                     AnalyticsAndSimulatorTabContent(
+                         summary = summary,
+                         subjects = subjects,
+-                        targetThreshold = targetThreshold
++                        targetThreshold = targetThreshold,
++                        onOpenCgpa = { showCgpa = true }
+                     )
+                 }
+ 
+@@ -939,7 +948,8 @@ private fun SubjectCard(
+ private fun AnalyticsAndSimulatorTabContent(
+     summary: AttendanceSummary,
+     subjects: List<SubjectAttendance>,
+-    targetThreshold: Double
++    targetThreshold: Double,
++    onOpenCgpa: () -> Unit = {}
+ ) {
+     val scrollState = rememberScrollState()
+ 
+@@ -969,6 +979,21 @@ private fun AnalyticsAndSimulatorTabContent(
+             .padding(16.dp),
+         horizontalAlignment = Alignment.CenterHorizontally
+     ) {
++        androidx.compose.material3.Card(
++            onClick = onOpenCgpa,
++            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
++            colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
++            modifier = Modifier.fillMaxWidth().testTag("open_cgpa_calculator")
++        ) {
++            Column(modifier = Modifier.padding(16.dp)) {
++                Text("CGPA Calculator", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onPrimaryContainer)
++                Text(
++                    "Work out your SGPA and CGPA from your grades, or see what you need to reach a target. Works for any college.",
++                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer
++                )
++            }
++        }
++        Spacer(modifier = Modifier.height(16.dp))
+         Text(
+             text = "Attendance Trend & Trajectory",
+             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+diff --git a/app/src/test/java/com/example/domain/CgpaCalculatorTest.kt b/app/src/test/java/com/example/domain/CgpaCalculatorTest.kt
+new file mode 100644
+index 0000000..7e8fa90
+--- /dev/null
++++ b/app/src/test/java/com/example/domain/CgpaCalculatorTest.kt
+@@ -0,0 +1,134 @@
++package com.example.domain
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.math.BigDecimal
++
++class CgpaCalculatorTest {
++    private fun bd(s: String) = BigDecimal(s)
++    private fun sub(name: String, credits: String, gp: String, counts: Boolean = true) = CalcSubject(name, bd(credits), bd(gp), counts)
++    private fun num(expected: String, actual: BigDecimal?) { assertNotNull(actual); assertEquals("expected $expected got $actual", 0, bd(expected).compareTo(actual)) }
++
++    // Sem 1: (4 x 9) + (3 x 8) + (3 x 10) = 90 over 10 credits -> 9.00.  Sem 2: (4 x 7) + (2 x 6) = 40 over 6 -> 6.666.. -> 6.67
++    private val sem1 = CalcSemester("Sem 1", listOf(sub("Maths", "4", "9"), sub("Physics", "3", "8"), sub("Chemistry", "3", "10")))
++    private val sem2 = CalcSemester("Sem 2", listOf(sub("Mech", "4", "7"), sub("Lab", "2", "6")))
++
++    @Test fun sgpaIsCreditWeighted() {
++        num("9", CgpaCalc.sgpa(sem1.subjects).sgpa); num("6.67", CgpaCalc.sgpa(sem2.subjects).sgpa)
++        num("10", CgpaCalc.sgpa(sem1.subjects).credits)
++    }
++
++    @Test fun cgpaOverAllSubjects() {
++        // (90 + 40) / 16 = 8.125 exactly
++        val r = CgpaCalc.cgpaFromSubjects(listOf(sem1, sem2))
++        num("8.13", r.cgpa); num("16", r.totalCredits); assertEquals(2, r.semesters.size); assertNull(r.note)
++    }
++
++    @Test fun roundingRuleIsAChoice() {
++        val two = listOf(sem1, sem2)
++        num("8.13", CgpaCalc.cgpaFromSubjects(two, rounding = CgpaRounding.HALF_UP).cgpa)
++        num("8.12", CgpaCalc.cgpaFromSubjects(two, rounding = CgpaRounding.HALF_EVEN).cgpa)
++        num("8.12", CgpaCalc.cgpaFromSubjects(two, rounding = CgpaRounding.TRUNCATE).cgpa)
++        num("8.125", CgpaCalc.cgpaFromSubjects(two, places = 3).cgpa)
++        num("8", CgpaCalc.cgpaFromSubjects(two, places = 0, rounding = CgpaRounding.TRUNCATE).cgpa)
++    }
++
++    @Test fun roundingSgpaFirstGivesTheOtherAnswer() {
++        // Sem A: three 1-credit subjects, all grade point 0 -> SGPA 0.00, 0 points over 3 credits.
++        // Sem B: three 1-credit subjects with grade points 1, 1, 0 -> 2 points over 3 credits = SGPA 0.6667 -> 0.67.
++        val a = CalcSemester("A", listOf(sub("a1", "1", "0"), sub("a2", "1", "0"), sub("a3", "1", "0")))
++        val b = CalcSemester("B", listOf(sub("b1", "1", "1"), sub("b2", "1", "1"), sub("b3", "1", "0")))
++        // exact method: 2 / 6 = 0.3333 -> 0.33
++        num("0.33", CgpaCalc.cgpaFromSubjects(listOf(a, b)).cgpa)
++        // rounded-SGPA-first: (0.00 x 3 + 0.67 x 3) / 6 = 2.01 / 6 = 0.335 -> 0.34 (half up)
++        num("0.34", CgpaCalc.cgpaFromSubjects(listOf(a, b), roundSgpaFirst = true).cgpa)
++        // the first semesters' own SGPAs are shown rounded either way
++        num("0.67", CgpaCalc.cgpaFromSubjects(listOf(a, b)).semesters[1].sgpa)
++    }
++
++    @Test fun excludedSubjectsAreSkipped() {
++        val s = CalcSemester("S", listOf(sub("a", "4", "9"), sub("old attempt", "4", "0", counts = false)))
++        num("9", CgpaCalc.cgpaFromSubjects(listOf(s)).cgpa); num("4", CgpaCalc.cgpaFromSubjects(listOf(s)).totalCredits)
++    }
++
++    @Test fun failedSubjectCountsWhenIncluded() {
++        // 90 + (3 x 0) over 13 credits = 6.923 -> 6.92
++        val s = CalcSemester("S", sem1.subjects + sub("Failed", "3", "0"))
++        num("6.92", CgpaCalc.cgpaFromSubjects(listOf(s)).cgpa)
++    }
++
++    @Test fun emptyInputGivesNoNumber() {
++        assertNull(CgpaCalc.cgpaFromSubjects(emptyList()).cgpa); assertNotNull(CgpaCalc.cgpaFromSubjects(emptyList()).note)
++        assertNull(CgpaCalc.sgpa(emptyList()).sgpa)
++        assertNull(CgpaCalc.cgpaFromSubjects(listOf(CalcSemester("x", listOf(sub("a", "3", "9", counts = false))))).cgpa)
++    }
++
++    @Test fun quickModeWithCredits() {
++        // (9.0 x 24 + 8.5 x 22 + 7.9 x 20) / 66 = (216 + 187 + 158) / 66 = 561 / 66 = 8.5
++        val r = CgpaCalc.cgpaFromSgpa(listOf(QuickSemester("1", bd("9.0"), bd("24")), QuickSemester("2", bd("8.5"), bd("22")), QuickSemester("3", bd("7.9"), bd("20"))), equalWeights = false)
++        num("8.5", r.cgpa); num("66", r.totalCredits); assertNull(r.note)
++    }
++
++    @Test fun quickModeWithoutCreditsIsAPlainAverageAndSaysSo() {
++        // (9 + 8 + 7.5) / 3 = 8.1666 -> 8.17
++        val items = listOf(QuickSemester("1", bd("9"), null), QuickSemester("2", bd("8"), null), QuickSemester("3", bd("7.5"), null))
++        val r = CgpaCalc.cgpaFromSgpa(items, equalWeights = false)
++        num("8.17", r.cgpa); assertTrue(r.note!!.contains("Plain average"))
++        // equal-weights switch ignores credits even if given: (9 + 7) / 2 = 8
++        num("8", CgpaCalc.cgpaFromSgpa(listOf(QuickSemester("1", bd("9"), bd("30")), QuickSemester("2", bd("7"), bd("10"))), equalWeights = true).cgpa)
++        // one missing credit value falls back to plain average
++        assertTrue(CgpaCalc.cgpaFromSgpa(listOf(QuickSemester("1", bd("9"), bd("30")), QuickSemester("2", bd("7"), null)), false).note != null)
++    }
++
++    @Test fun percentageNeedsAFactor() {
++        num("77.19", CgpaCalc.percentage(bd("8.125"), bd("9.5")))          // 77.1875
++        assertNull(CgpaCalc.percentage(bd("8.125"), null)); assertNull(CgpaCalc.percentage(null, bd("9.5"))); assertNull(CgpaCalc.percentage(bd("8"), bd("0")))
++        num("77.18", CgpaCalc.percentage(bd("8.125"), bd("9.5"), rounding = CgpaRounding.TRUNCATE))
++    }
++
++    @Test fun targetRequiredAverage() {
++        // CGPA 8.0 over 60 credits, 20 credits left, target 8.5: (8.5 x 80 - 8 x 60) / 20 = (680 - 480) / 20 = 10 -> needs a 10 (an O) everywhere
++        val r = CgpaCalc.requiredAverage(bd("8"), bd("60"), bd("20"), bd("8.5"), GradeScales.TEN_POINT_U)
++        assertTrue(r.feasible); num("10", r.requiredAverage); assertEquals("O", r.closestGrade)
++        // target 8.25: (8.25 x 80 - 480) / 20 = 9.0 -> A+
++        val r2 = CgpaCalc.requiredAverage(bd("8"), bd("60"), bd("20"), bd("8.25"), GradeScales.TEN_POINT_U)
++        num("9", r2.requiredAverage); assertEquals("A+", r2.closestGrade)
++    }
++
++    @Test fun targetNotReachableIsHonest() {
++        // 8.0 over 60, 20 left, target 9: (720 - 480) / 20 = 12 > 10. best = (480 + 200) / 80 = 8.5
++        val r = CgpaCalc.requiredAverage(bd("8"), bd("60"), bd("20"), bd("9"), GradeScales.TEN_POINT_U)
++        assertFalse(r.feasible); num("12", r.requiredAverage); num("8.5", r.bestReachableCgpa); assertTrue(r.message.startsWith("Not reachable"))
++    }
++
++    @Test fun targetAlreadySecured() {
++        // 9.0 over 100, 10 left, target 8: (8 x 110 - 900) / 10 = -2 -> secured
++        val r = CgpaCalc.requiredAverage(bd("9"), bd("100"), bd("10"), bd("8"), GradeScales.TEN_POINT_U)
++        assertTrue(r.feasible); num("0", r.requiredAverage); assertTrue(r.message.startsWith("Already secured"))
++    }
++
++    @Test fun targetUsesTheStudentsOwnScale() {
++        // 4.0 scale: current 3.0 over 30, 30 left, target 3.5 -> (3.5 x 60 - 90) / 30 = 4.0 -> A, reachable exactly
++        val r = CgpaCalc.requiredAverage(bd("3"), bd("30"), bd("30"), bd("3.5"), GradeScales.FOUR_POINT)
++        assertTrue(r.feasible); num("4", r.requiredAverage); assertEquals("A", r.closestGrade)
++        assertFalse(CgpaCalc.requiredAverage(bd("3"), bd("30"), bd("30"), bd("3.6"), GradeScales.FOUR_POINT).feasible)
++    }
++
++    @Test fun targetNeedsRemainingCredits() {
++        assertFalse(CgpaCalc.requiredAverage(bd("8"), bd("60"), bd("0"), bd("9"), GradeScales.TEN_POINT_U).feasible)
++    }
++
++    @Test fun parsingNumbers() {
++        num("3.5", CgpaCalc.parseNumber("3,5")); num("10", CgpaCalc.parseNumber(" 10 "))
++        assertNull(CgpaCalc.parseNumber("")); assertNull(CgpaCalc.parseNumber("1e3")); assertNull(CgpaCalc.parseNumber("-2")); assertNull(CgpaCalc.parseNumber("1.2.3")); assertNull(CgpaCalc.parseNumber("abc")); assertNull(CgpaCalc.parseNumber("123456789"))
++        assertTrue(CgpaCalc.validCredits(bd("3"))); assertFalse(CgpaCalc.validCredits(bd("0"))); assertFalse(CgpaCalc.validCredits(bd("41"))); assertFalse(CgpaCalc.validCredits(null))
++    }
++
++    @Test fun gradeScaleLookups() {
++        num("9", GradeScales.TEN_POINT_U.pointOf("a+")); assertNull(GradeScales.TEN_POINT_U.pointOf("Z")); num("10", GradeScales.TEN_POINT_U.maxPoint); num("4", GradeScales.FOUR_POINT.maxPoint)
++    }
++}
+diff --git a/app/src/test/java/com/example/domain/CgpaEvaluatorTest.kt b/app/src/test/java/com/example/domain/CgpaEvaluatorTest.kt
+new file mode 100644
+index 0000000..b7474ca
+--- /dev/null
++++ b/app/src/test/java/com/example/domain/CgpaEvaluatorTest.kt
+@@ -0,0 +1,79 @@
++package com.example.domain
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.math.BigDecimal
++
++class CgpaEvaluatorTest {
++    private fun num(expected: String, actual: BigDecimal?) { assertNotNull(actual); assertEquals("expected $expected got $actual", 0, BigDecimal(expected).compareTo(actual)) }
++    private fun row(id: String, name: String, credits: String, grade: String, counts: Boolean = true) = SubjectRow(id, name, credits, grade, counts)
++
++    private val base = CgpaUiState(semesters = listOf(
++        SemesterBlock("s1", "Sem 1", listOf(row("a", "Maths", "4", "A+"), row("b", "Physics", "3", "A"), row("c", "Chem", "3", "O"))),   // 36 + 24 + 30 = 90 / 10 = 9.00
++        SemesterBlock("s2", "Sem 2", listOf(row("d", "Mech", "4", "B+"), row("e", "Lab", "2", "B")))                                         // 28 + 12 = 40 / 6
++    ))
++
++    @Test fun computesFromTypedRows() {
++        val e = CgpaEvaluator.evaluate(base)
++        num("8.13", e.subjects.cgpa); num("16", e.subjects.totalCredits); assertTrue(e.rowIssues.isEmpty()); assertTrue(e.warnings.isEmpty())
++        num("9", e.subjects.semesters[0].sgpa)
++    }
++
++    @Test fun blankRowsAreIgnoredButBadRowsAreFlaggedNotSilentlyDropped() {
++        val s = base.copy(semesters = listOf(SemesterBlock("s1", "S", listOf(
++            row("ok", "Maths", "4", "A+"), row("blank", "", "", ""), row("nocredit", "X", "", "A"), row("badgrade", "Y", "3", "Z"), row("nograde", "W", "3", ""), row("bigcredit", "V", "99", "A")))))
++        val e = CgpaEvaluator.evaluate(s)
++        num("9", e.subjects.cgpa); num("4", e.subjects.totalCredits)
++        assertEquals(setOf("nocredit", "badgrade", "nograde", "bigcredit"), e.rowIssues.keys)
++        assertEquals("Pick a grade.", e.rowIssues["nograde"]); assertTrue(e.rowIssues["badgrade"]!!.contains("not in your scale"))
++        assertTrue(e.warnings.any { it.contains("4 row(s)") })
++    }
++
++    @Test fun excludedSubjectsDoNotCount() {
++        val s = base.copy(semesters = listOf(SemesterBlock("s", "S", listOf(row("a", "New", "4", "A+"), row("b", "Old attempt", "4", "U", counts = false)))))
++        num("9", CgpaEvaluator.evaluate(s).subjects.cgpa)
++    }
++
++    @Test fun customScaleIsUsed() {
++        val s = base.copy(grades = listOf(GradeRow("1", "Distinction", "10"), GradeRow("2", "Pass", "5"), GradeRow("3", "", "")),
++            semesters = listOf(SemesterBlock("s", "S", listOf(row("a", "x", "2", "distinction"), row("b", "y", "2", "Pass")))))
++        num("7.5", CgpaEvaluator.evaluate(s).subjects.cgpa)                        // (20 + 10) / 4
++        val broken = base.copy(grades = listOf(GradeRow("1", "A", "ten"), GradeRow("2", "B", "8")))
++        assertTrue(CgpaEvaluator.evaluate(broken).warnings.any { it.contains("incomplete") })
++    }
++
++    @Test fun quickModeAndPercentage() {
++        val s = base.copy(mode = 1, factor = "9.5", quick = listOf(QuickRow("1", "S1", "9.0", "24"), QuickRow("2", "S2", "8.5", "22"), QuickRow("3", "S3", "7.9", "20")))
++        val e = CgpaEvaluator.evaluate(s)
++        num("8.5", e.quick.cgpa); num("80.75", e.percent)                           // 8.5 x 9.5
++        assertNull(CgpaEvaluator.evaluate(s.copy(factor = "")).percent)
++        assertTrue(CgpaEvaluator.evaluate(s.copy(factor = "abc")).warnings.any { it.contains("percentage factor") })
++    }
++
++    @Test fun quickModeRejectsSgpaAboveTheScale() {
++        val e = CgpaEvaluator.evaluate(base.copy(mode = 1, quick = listOf(QuickRow("1", "S1", "11", ""), QuickRow("2", "S2", "8", ""))))
++        assertEquals(setOf("1"), e.rowIssues.keys); num("8", e.quick.cgpa)
++    }
++
++    @Test fun targetNeedsAllFourNumbersAndSaneValues() {
++        assertNull(CgpaEvaluator.evaluate(base.copy(target = TargetInputs("8", "60", "", "8.5"))).target)
++        val ok = CgpaEvaluator.evaluate(base.copy(target = TargetInputs("8", "60", "20", "8.25"))).target!!
++        assertTrue(ok.feasible); num("9", ok.requiredAverage); assertEquals("A+", ok.closestGrade)
++        val bad = CgpaEvaluator.evaluate(base.copy(target = TargetInputs("8", "60", "20", "11"))).target!!
++        assertTrue(!bad.feasible && bad.message.contains("top grade point"))
++    }
++
++    @Test fun roundingSettingsFlowThrough() {
++        num("8.12", CgpaEvaluator.evaluate(base.copy(rounding = CgpaRounding.HALF_EVEN)).subjects.cgpa)
++        num("8.125", CgpaEvaluator.evaluate(base.copy(places = 3)).subjects.cgpa)
++    }
++
++    @Test fun prefillValuesForTheTargetTab() {
++        val e = CgpaEvaluator.evaluate(base)
++        num("8.13", e.prefillCurrent); num("16", e.prefillCredits)
++        assertNull(CgpaEvaluator.evaluate(CgpaUiState()).prefillCurrent)
++    }
++}
+diff --git a/docs/CGPA_CALCULATOR.md b/docs/CGPA_CALCULATOR.md
+new file mode 100644
+index 0000000..961a926
+--- /dev/null
++++ b/docs/CGPA_CALCULATOR.md
+@@ -0,0 +1,21 @@
++# CGPA Calculator
++
++Open it from **Analytics tab > CGPA Calculator**. It works for any college: no ERP login, account or academic setup needed. Inputs are saved on the phone only.
++
++## Three modes
++- **By subjects**: semesters with subjects (credits + grade). SGPA per semester and CGPA overall = sum(credit x grade point) / sum(credits).
++- **From SGPAs**: type each semester's published SGPA (+ credits for a credit-weighted CGPA). Without credits it is a plain average and says so.
++- **Target**: current CGPA, credits done, credits left, target -> the average grade point you need (and the closest grade). Says "not reachable" with the best possible CGPA when it is impossible.
++
++## Nothing is assumed about your university
++Grade scale (presets are examples, fully editable), rounding (half up / half even / cut off), decimal places, "round each SGPA first", whether a row counts toward GPA, and the CGPA-to-percentage factor are all settings. No factor = no percentage is shown.
++Incomplete or invalid rows are listed with the reason and are NOT counted; they are never dropped silently.
++
++## Files
++`domain/CgpaCalculator.kt` (maths), `domain/CgpaUiModel.kt` (state to results), `data/preferences/CgpaStore.kt`, `ui/CgpaViewModel.kt`, `ui/screens/CgpaCalculatorScreen.kt`, hook in `DashboardScreen.kt`.
++
++## Tests
++`CgpaCalculatorTest` (17) + `CgpaEvaluatorTest` (9): 26 passed on a JVM with the Kotlin 2.2.10 compiler. Includes exact-tie rounding (8.125 -> 8.13 / 8.12 / 8.12), a real case where rounding SGPA first changes the CGPA, and unreachable/secured targets.
++
++## Not verified
++The Compose screen, SharedPreferences storage and the dashboard hook were never compiled or run (no Android SDK here). Please build, then check: add 2 semesters, switch tabs, rotate the phone, kill and reopen the app (inputs persist), 200% font size, TalkBack reads the row delete buttons.
+-- 
+2.43.0

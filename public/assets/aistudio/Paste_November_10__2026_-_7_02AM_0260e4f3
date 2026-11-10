@@ -1,0 +1,838 @@
+From 00578180783b1d27dc3c4afadae3e5916d3dc6f6 Mon Sep 17 00:00:00 2001
+From: claude <c@x>
+Date: Tue, 10 Nov 2026 01:29:21 +0000
+Subject: [PATCH] WIP (not wired into the app): CHATS domain logic, Firestore
+ rules, indexes, rules tests, optional FCM function
+
+---
+ .../java/com/example/domain/chat/ChatLogic.kt | 154 +++++++++++++++
+ .../com/example/domain/chat/ChatLogicTest.kt  | 127 ++++++++++++
+ firebase.json                                 |  11 +-
+ firestore.chat.test.js                        | 180 ++++++++++++++++++
+ firestore.indexes.json                        |  33 ++++
+ firestore.rules                               | 171 +++++++++++++++++
+ functions/index.js                            |  64 +++++++
+ functions/package.json                        |  10 +
+ 8 files changed, 748 insertions(+), 2 deletions(-)
+ create mode 100644 app/src/main/java/com/example/domain/chat/ChatLogic.kt
+ create mode 100644 app/src/test/java/com/example/domain/chat/ChatLogicTest.kt
+ create mode 100644 firestore.chat.test.js
+ create mode 100644 firestore.indexes.json
+ create mode 100644 functions/index.js
+ create mode 100644 functions/package.json
+
+diff --git a/app/src/main/java/com/example/domain/chat/ChatLogic.kt b/app/src/main/java/com/example/domain/chat/ChatLogic.kt
+new file mode 100644
+index 0000000..0d2d0b2
+--- /dev/null
++++ b/app/src/main/java/com/example/domain/chat/ChatLogic.kt
+@@ -0,0 +1,154 @@
++package com.example.domain.chat
++
++import java.security.SecureRandom
++import java.util.TimeZone
++
++/**
++ * Pure rules for the CHATS section (no Android or Firebase types, so everything here is unit tested on a JVM).
++ * The same rules are enforced again on the server in firestore.rules: the app is never the only gatekeeper.
++ */
++
++enum class ChatKind { MESSAGE, TASK }
++
++enum class ChatPriority(val rank: Int, val label: String) {
++    LOW(0, "Low"), NORMAL(1, "Normal"), HIGH(2, "High"), URGENT(3, "Urgent");
++    companion object { fun parse(s: String?): ChatPriority = values().firstOrNull { it.name == s } ?: NORMAL }
++}
++
++/** MEMBER only reads. REP (class rep, club lead) and OWNER (created the community) can send. Only OWNER manages members. */
++enum class CommunityRole(val canSend: Boolean, val canManageMembers: Boolean) {
++    MEMBER(false, false), REP(true, false), OWNER(true, true);
++    companion object { fun parse(s: String?): CommunityRole = values().firstOrNull { it.name == s?.uppercase() } ?: MEMBER }
++}
++
++enum class CommunityKind(val label: String) { CLASS("Class"), CLUB("Club"), OTHER("Other") }
++
++data class MessageDraft(
++    val kind: ChatKind, val title: String, val body: String, val priority: ChatPriority,
++    val deadlineMillis: Long?, val audienceAll: Boolean, val recipients: Set<String>
++)
++
++object ChatValidation {
++    const val TITLE_MAX = 100
++    const val BODY_MAX = 2000
++    const val MAX_RECIPIENTS = 300
++    const val MIN_DEADLINE_AHEAD_MILLIS = 60_000L
++
++    /** Human-readable problems; empty list = OK to send. */
++    fun validate(d: MessageDraft, nowMillis: Long, senderRole: CommunityRole): List<String> {
++        val e = ArrayList<String>()
++        if (!senderRole.canSend) e += "Only representatives and community owners can send messages."
++        if (d.title.isBlank()) e += "Add a title."
++        if (d.title.trim().length > TITLE_MAX) e += "Title is longer than $TITLE_MAX characters."
++        if (d.body.length > BODY_MAX) e += "Message is longer than $BODY_MAX characters."
++        if (d.kind == ChatKind.TASK) {
++            if (d.deadlineMillis == null) e += "A task needs a deadline."
++            else if (d.deadlineMillis < nowMillis + MIN_DEADLINE_AHEAD_MILLIS) e += "The deadline must be at least a minute in the future."
++        } else if (d.deadlineMillis != null) e += "Only tasks have a deadline."
++        if (!d.audienceAll) {
++            if (d.recipients.isEmpty()) e += "Select at least one member, or send to everyone."
++            if (d.recipients.size > MAX_RECIPIENTS) e += "You can select at most $MAX_RECIPIENTS members."
++        }
++        return e
++    }
++}
++
++enum class DeadlineState { NONE, DONE, CANCELLED, OVERDUE, DUE_SOON, UPCOMING }
++
++data class PlannedReminder(val leadMinutes: Int, val fireAtMillis: Long, val automatic: Boolean)
++
++object ChatLogic {
++    const val AUTO_LEAD_MINUTES = 24 * 60            // "1 day before" for everyone, automatically
++    const val MIN_CUSTOM_LEAD_MINUTES = 5
++    const val MAX_CUSTOM_LEAD_MINUTES = 30 * 24 * 60
++    const val MAX_CUSTOM_REMINDERS = 5
++    private const val MIN = 60_000L
++
++    fun deadlineState(deadlineMillis: Long?, done: Boolean, cancelled: Boolean, now: Long): DeadlineState = when {
++        cancelled -> DeadlineState.CANCELLED
++        deadlineMillis == null -> DeadlineState.NONE
++        done -> DeadlineState.DONE
++        deadlineMillis < now -> DeadlineState.OVERDUE
++        deadlineMillis - now <= AUTO_LEAD_MINUTES * MIN -> DeadlineState.DUE_SOON
++        else -> DeadlineState.UPCOMING
++    }
++
++    /** Text label for badges. Always words (never colour only). */
++    fun dueText(deadlineMillis: Long, now: Long): String {
++        val diffMin = Math.abs(deadlineMillis - now) / MIN
++        val span = when {
++            diffMin < 60 -> "${maxOf(diffMin, 1)} min"
++            diffMin < 48 * 60 -> "${diffMin / 60} h"
++            else -> "${diffMin / (24 * 60)} days"
++        }
++        return if (deadlineMillis < now) "Overdue by $span" else "Due in $span"
++    }
++
++    /** Keeps only sensible custom reminder offsets: 5 min .. 30 days, unique, at most 5. */
++    fun cleanCustomLeads(leads: List<Int>): List<Int> =
++        leads.filter { it in MIN_CUSTOM_LEAD_MINUTES..MAX_CUSTOM_LEAD_MINUTES }.distinct().sorted().take(MAX_CUSTOM_REMINDERS)
++
++    /**
++     * Every reminder that should still fire for a task: the automatic 1-day-before one plus the user's own.
++     * Nothing for done or cancelled tasks, and reminders whose moment has already passed are dropped
++     * (no late, instant notifications). Two reminders at the same moment collapse into one.
++     */
++    fun reminderPlan(
++        deadlineMillis: Long?, now: Long, done: Boolean, cancelled: Boolean,
++        customLeadMinutes: List<Int>, autoEnabled: Boolean = true
++    ): List<PlannedReminder> {
++        if (deadlineMillis == null || done || cancelled) return emptyList()
++        val all = ArrayList<PlannedReminder>()
++        if (autoEnabled) all += PlannedReminder(AUTO_LEAD_MINUTES, deadlineMillis - AUTO_LEAD_MINUTES * MIN, true)
++        cleanCustomLeads(customLeadMinutes).forEach { all += PlannedReminder(it, deadlineMillis - it * MIN, false) }
++        return all.filter { it.fireAtMillis > now }
++            .sortedWith(compareBy({ it.fireAtMillis }, { !it.automatic }))
++            .distinctBy { it.fireAtMillis }
++    }
++
++    data class InboxItem(val id: String, val kind: ChatKind, val priority: ChatPriority, val deadlineMillis: Long?, val createdAtMillis: Long, val done: Boolean, val cancelled: Boolean)
++
++    /** To-do ordering: open before done, overdue first, higher priority first, earlier deadline first, newest last. */
++    fun taskOrder(now: Long): Comparator<InboxItem> = Comparator { a, b ->
++        fun group(i: InboxItem) = when {
++            i.cancelled -> 3
++            i.done -> 2
++            i.deadlineMillis != null && i.deadlineMillis < now -> 0
++            else -> 1
++        }
++        val g = group(a).compareTo(group(b))
++        if (g != 0) return@Comparator g
++        val p = b.priority.rank.compareTo(a.priority.rank)
++        if (p != 0) return@Comparator p
++        val da = a.deadlineMillis ?: Long.MAX_VALUE; val db = b.deadlineMillis ?: Long.MAX_VALUE
++        val d = da.compareTo(db)
++        if (d != 0) return@Comparator d
++        b.createdAtMillis.compareTo(a.createdAtMillis)
++    }
++
++    fun progressText(done: Int, total: Int): String =
++        if (total <= 0) "No recipients" else "$done of $total done (${Math.round(done * 100.0 / total)}%)"
++
++    fun localDayStart(millis: Long, tz: TimeZone): Long {
++        val c = java.util.Calendar.getInstance(tz).apply { timeInMillis = millis }
++        c.set(java.util.Calendar.HOUR_OF_DAY, 0); c.set(java.util.Calendar.MINUTE, 0); c.set(java.util.Calendar.SECOND, 0); c.set(java.util.Calendar.MILLISECOND, 0)
++        return c.timeInMillis
++    }
++}
++
++/** Invite codes: 8 characters from an alphabet without look-alikes (no 0/O, 1/I/L). Generated with SecureRandom. */
++object JoinCode {
++    const val ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
++    const val LENGTH = 8
++
++    fun generate(random: java.util.Random = SecureRandom()): String =
++        buildString { repeat(LENGTH) { append(ALPHABET[random.nextInt(ALPHABET.length)]) } }
++
++    /** Accepts "abcd-2345", " ABCD 2345 " etc. Returns the canonical code, or null if it cannot be a valid code. */
++    fun normalize(input: String): String? {
++        val s = input.uppercase().filter { it != ' ' && it != '-' }
++        return if (s.length == LENGTH && s.all { it in ALPHABET }) s else null
++    }
++
++    fun pretty(code: String): String = if (code.length == LENGTH) code.substring(0, 4) + "-" + code.substring(4) else code
++}
+diff --git a/app/src/test/java/com/example/domain/chat/ChatLogicTest.kt b/app/src/test/java/com/example/domain/chat/ChatLogicTest.kt
+new file mode 100644
+index 0000000..a080eb6
+--- /dev/null
++++ b/app/src/test/java/com/example/domain/chat/ChatLogicTest.kt
+@@ -0,0 +1,127 @@
++package com.example.domain.chat
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.util.Random
++
++class ChatLogicTest {
++    private val now = 1_800_000_000_000L
++    private val h = 3_600_000L
++    private val d = 24 * h
++
++    private fun draft(kind: ChatKind = ChatKind.TASK, title: String = "Submit record", deadline: Long? = now + 2 * d, all: Boolean = true, rec: Set<String> = emptySet(), body: String = "") =
++        MessageDraft(kind, title, body, ChatPriority.HIGH, deadline, all, rec)
++
++    // ---- roles
++    @Test fun onlyRepsAndOwnersCanSend() {
++        assertFalse(CommunityRole.MEMBER.canSend); assertTrue(CommunityRole.REP.canSend); assertTrue(CommunityRole.OWNER.canSend)
++        assertTrue(CommunityRole.OWNER.canManageMembers); assertFalse(CommunityRole.REP.canManageMembers)
++        assertEquals(CommunityRole.MEMBER, CommunityRole.parse("hacker")); assertEquals(CommunityRole.REP, CommunityRole.parse("rep"))
++        assertEquals(listOf("Only representatives and community owners can send messages."), ChatValidation.validate(draft(), now, CommunityRole.MEMBER))
++    }
++
++    // ---- validation
++    @Test fun validDraftsPass() {
++        assertTrue(ChatValidation.validate(draft(), now, CommunityRole.REP).isEmpty())
++        assertTrue(ChatValidation.validate(draft(kind = ChatKind.MESSAGE, deadline = null), now, CommunityRole.OWNER).isEmpty())
++        assertTrue(ChatValidation.validate(draft(all = false, rec = setOf("u1")), now, CommunityRole.REP).isEmpty())
++    }
++
++    @Test fun invalidDraftsAreRejected() {
++        fun errs(x: MessageDraft) = ChatValidation.validate(x, now, CommunityRole.REP)
++        assertTrue(errs(draft(title = "  ")).contains("Add a title."))
++        assertTrue(errs(draft(title = "x".repeat(101))).any { it.contains("Title") })
++        assertTrue(errs(draft(body = "x".repeat(2001))).any { it.contains("Message") })
++        assertTrue(errs(draft(deadline = null)).contains("A task needs a deadline."))
++        assertTrue(errs(draft(deadline = now + 30_000)).any { it.contains("future") })      // < 1 minute ahead
++        assertTrue(errs(draft(deadline = now - 1)).any { it.contains("future") })
++        assertTrue(errs(draft(kind = ChatKind.MESSAGE, deadline = now + d)).contains("Only tasks have a deadline."))
++        assertTrue(errs(draft(all = false)).any { it.contains("Select at least one") })
++        assertTrue(errs(draft(all = false, rec = (1..301).map { "u$it" }.toSet())).any { it.contains("at most 300") })
++    }
++
++    // ---- deadline state + labels
++    @Test fun deadlineStates() {
++        fun s(dl: Long?, done: Boolean = false, c: Boolean = false) = ChatLogic.deadlineState(dl, done, c, now)
++        assertEquals(DeadlineState.NONE, s(null)); assertEquals(DeadlineState.DONE, s(now + d, done = true))
++        assertEquals(DeadlineState.CANCELLED, s(now + d, c = true)); assertEquals(DeadlineState.OVERDUE, s(now - 1))
++        assertEquals(DeadlineState.DUE_SOON, s(now + d)); assertEquals(DeadlineState.UPCOMING, s(now + d + 1))
++        assertEquals(DeadlineState.DONE, s(now - 5 * h, done = true))   // finished late tasks are simply done
++    }
++
++    @Test fun dueText() {
++        assertEquals("Due in 30 min", ChatLogic.dueText(now + 30 * 60_000L, now)); assertEquals("Due in 5 h", ChatLogic.dueText(now + 5 * h, now))
++        assertEquals("Due in 3 days", ChatLogic.dueText(now + 3 * d + h, now)); assertEquals("Overdue by 2 h", ChatLogic.dueText(now - 2 * h, now))
++        assertEquals("Due in 1 min", ChatLogic.dueText(now + 10_000, now))
++    }
++
++    // ---- reminders
++    @Test fun automaticReminderIsOneDayBefore() {
++        val p = ChatLogic.reminderPlan(now + 3 * d, now, false, false, emptyList())
++        assertEquals(1, p.size); assertEquals(now + 2 * d, p[0].fireAtMillis); assertTrue(p[0].automatic); assertEquals(1440, p[0].leadMinutes)
++    }
++
++    @Test fun customRemindersAreAddedAndSorted() {
++        val p = ChatLogic.reminderPlan(now + 3 * d, now, false, false, listOf(60, 600))
++        assertEquals(listOf(now + 2 * d, now + 3 * d - 600 * 60_000L, now + 3 * d - 60 * 60_000L), p.map { it.fireAtMillis })
++        assertEquals(listOf(true, false, false), p.map { it.automatic })
++    }
++
++    @Test fun noReminderForDoneOrCancelledOrNoDeadline() {
++        assertTrue(ChatLogic.reminderPlan(now + 3 * d, now, true, false, listOf(60)).isEmpty())
++        assertTrue(ChatLogic.reminderPlan(now + 3 * d, now, false, true, listOf(60)).isEmpty())
++        assertTrue(ChatLogic.reminderPlan(null, now, false, false, listOf(60)).isEmpty())
++    }
++
++    @Test fun pastRemindersAreDroppedNotFiredLate() {
++        // Task due in 10 hours: the 1-day reminder is already in the past and is skipped; a 2-hour custom one remains.
++        val p = ChatLogic.reminderPlan(now + 10 * h, now, false, false, listOf(120))
++        assertEquals(listOf(now + 8 * h), p.map { it.fireAtMillis })
++        assertTrue(ChatLogic.reminderPlan(now + h, now, false, false, listOf(120)).isEmpty())
++    }
++
++    @Test fun duplicateMomentsCollapseAndAutoCanBeOff() {
++        val p = ChatLogic.reminderPlan(now + 3 * d, now, false, false, listOf(1440))   // same moment as automatic
++        assertEquals(1, p.size); assertTrue(p[0].automatic)
++        assertEquals(listOf(false), ChatLogic.reminderPlan(now + 3 * d, now, false, false, listOf(60), autoEnabled = false).map { it.automatic })
++    }
++
++    @Test fun customLeadsAreCleaned() {
++        assertEquals(listOf(5, 60, 1440), ChatLogic.cleanCustomLeads(listOf(60, 1, 5, 60, 1440, 99999999)))
++        assertEquals(5, ChatLogic.cleanCustomLeads((1..20).map { it * 10 }).size)
++    }
++
++    // ---- ordering
++    @Test fun taskOrdering() {
++        fun item(id: String, p: ChatPriority = ChatPriority.NORMAL, dl: Long? = now + d, done: Boolean = false, c: Boolean = false, created: Long = 0) =
++            ChatLogic.InboxItem(id, ChatKind.TASK, p, dl, created, done, c)
++        val list = listOf(
++            item("done", done = true), item("cancelled", c = true), item("later-low", ChatPriority.LOW, now + 5 * d),
++            item("soon-normal", dl = now + d), item("urgent-late", ChatPriority.URGENT, now + 9 * d), item("overdue", dl = now - h),
++            item("nodeadline", dl = null)
++        )
++        // priority is compared before deadline: a NORMAL task with no deadline outranks a LOW task due in 5 days
++        assertEquals(listOf("overdue", "urgent-late", "soon-normal", "nodeadline", "later-low", "done", "cancelled"),
++            list.sortedWith(ChatLogic.taskOrder(now)).map { it.id })
++    }
++
++    @Test fun progress() {
++        assertEquals("12 of 30 done (40%)", ChatLogic.progressText(12, 30)); assertEquals("No recipients", ChatLogic.progressText(0, 0))
++        assertEquals("1 of 3 done (33%)", ChatLogic.progressText(1, 3))
++    }
++
++    // ---- join codes
++    @Test fun joinCodes() {
++        val c = JoinCode.generate(Random(42))
++        assertEquals(8, c.length); assertTrue(c.all { it in JoinCode.ALPHABET })
++        assertFalse(c.any { it in "01OIL" })
++        assertEquals("ABCD2345", JoinCode.normalize(" abcd-2345 "))
++        assertNull(JoinCode.normalize("ABCD234")); assertNull(JoinCode.normalize("ABCD2340")); assertNull(JoinCode.normalize("ABCD23456"))
++        assertEquals("ABCD-2345", JoinCode.pretty("ABCD2345"))
++        assertTrue((1..200).map { JoinCode.generate(Random(it.toLong())) }.toSet().size > 190)
++        assertEquals(c, JoinCode.normalize(JoinCode.pretty(c)))
++    }
++}
+diff --git a/firebase.json b/firebase.json
+index 5927e52..f6ad1a6 100644
+--- a/firebase.json
++++ b/firebase.json
+@@ -2,7 +2,8 @@
+   "firestore": [
+     {
+       "database": "ai-studio-android-clg1-c3e120b1-448b-44b7-96ec-4127b50bcb87",
+-      "rules": "firestore.rules"
++      "rules": "firestore.rules",
++      "indexes": "firestore.indexes.json"
+     }
+   ],
+   "emulators": {
+@@ -17,5 +18,11 @@
+     "ui": {
+       "enabled": false
+     }
+-  }
++  },
++  "functions": [
++    {
++      "source": "functions",
++      "codebase": "default"
++    }
++  ]
+ }
+diff --git a/firestore.chat.test.js b/firestore.chat.test.js
+new file mode 100644
+index 0000000..2c26981
+--- /dev/null
++++ b/firestore.chat.test.js
+@@ -0,0 +1,180 @@
++// Security-rules tests for the CHATS feature.
++// Run (needs Node 20+, Java 21 and the Firebase emulator):
++//   npm i --no-save @firebase/rules-unit-testing firebase
++//   npx firebase emulators:exec --only firestore "node --test firestore.chat.test.js"
++// NOTE: these were written but NOT executed in the environment that produced them (no emulator access).
++const { initializeTestEnvironment, assertFails, assertSucceeds } = require("@firebase/rules-unit-testing");
++const { test, before, after, beforeEach } = require("node:test");
++const fs = require("node:fs");
++const firebase = require("firebase/compat/app");
++require("firebase/compat/firestore");
++
++const OWNER = "owner_1", REP = "rep_2", MEMBER = "member_3", OTHER = "other_4", OUTSIDER = "outsider_5";
++const CID = "cse_a", CODE = "ABCD2345";
++const ts = () => firebase.firestore.FieldValue.serverTimestamp();
++const inDays = (n) => new Date(Date.now() + n * 86400000);
++const [host, portStr] = (process.env.FIRESTORE_EMULATOR_HOST || "127.0.0.1:8085").split(":");
++let testEnv;
++
++before(async () => {
++  testEnv = await initializeTestEnvironment({
++    projectId: process.env.GCP_PROJECT || "demo-no-project",
++    firestore: { rules: fs.readFileSync("./firestore.rules", "utf8"), host, port: parseInt(portStr, 10) },
++  });
++});
++after(async () => { if (testEnv) await testEnv.cleanup(); });
++beforeEach(async () => { await testEnv.clearFirestore(); });
++
++const db = (uid) => testEnv.authenticatedContext(uid).firestore();
++
++// Creates community + owner membership + invite code the way the app does (one batch).
++async function createCommunity() {
++  const d = db(OWNER);
++  const b = d.batch();
++  b.set(d.doc(`communities/${CID}`), { name: "CSE A 2026", kind: "CLASS", collegeName: "ACGCET", ownerId: OWNER, createdAt: ts(), verified: false, joinCode: CODE });
++  b.set(d.doc(`communities/${CID}/members/${OWNER}`), { uid: OWNER, displayName: "Olivia", role: "owner", joinedAt: ts() });
++  b.set(d.doc(`joinCodes/${CODE}`), { communityId: CID, name: "CSE A 2026", createdBy: OWNER, createdAt: ts() });
++  await b.commit();
++}
++const join = (uid, code = CODE, role = "member") =>
++  db(uid).doc(`communities/${CID}/members/${uid}`).set({ uid, displayName: "S " + uid, role, joinedAt: ts(), joinCode: code });
++async function seedRoles() {
++  await createCommunity();
++  await assertSucceeds(join(REP)); await assertSucceeds(join(MEMBER)); await assertSucceeds(join(OTHER));
++  await assertSucceeds(db(OWNER).doc(`communities/${CID}/members/${REP}`).update({ role: "rep" }));
++}
++const msg = (uid, over = {}) => ({
++  kind: "TASK", title: "Submit lab record", body: "Hand it to the HOD", priority: "HIGH", deadlineAt: inDays(2),
++  audience: "all", recipients: [], senderId: uid, senderName: "Sender", senderRole: "rep", communityId: CID,
++  createdAt: ts(), updatedAt: ts(), cancelled: false, ...over,
++});
++const send = (uid, id, over) => db(uid).doc(`communities/${CID}/messages/${id}`).set(msg(uid, over));
++
++test("anyone signed in can create a community and becomes its owner", async () => { await assertSucceeds(createCommunity()); });
++test("verified flag cannot be set by clients", async () => {
++  const d = db(OWNER);
++  await assertFails(d.doc(`communities/${CID}`).set({ name: "Fake Official", kind: "CLASS", collegeName: "X", ownerId: OWNER, createdAt: ts(), verified: true, joinCode: CODE }));
++});
++test("cannot create a community owned by someone else", async () => {
++  await assertFails(db(OTHER).doc(`communities/${CID}`).set({ name: "Mine", kind: "CLASS", collegeName: "X", ownerId: OWNER, createdAt: ts(), verified: false, joinCode: CODE }));
++});
++
++test("joining needs a valid invite code and only as a plain member", async () => {
++  await createCommunity();
++  await assertSucceeds(join(MEMBER));
++  await assertFails(join(OTHER, "ZZZZ9999"));                 // wrong code
++  await assertFails(join(OTHER, CODE, "rep"));                // cannot join as rep
++  await assertFails(join(OTHER, CODE, "owner"));              // cannot join as owner
++});
++
++test("a plain member cannot send; reps and owners can", async () => {
++  await seedRoles();
++  await assertFails(send(MEMBER, "m1", { senderRole: "member" }));
++  await assertSucceeds(send(REP, "m2"));
++  await assertSucceeds(send(OWNER, "m3", { senderRole: "owner" }));
++});
++
++test("sender cannot forge identity, role, or a past deadline", async () => {
++  await seedRoles();
++  await assertFails(send(REP, "f1", { senderId: OWNER }));
++  await assertFails(send(REP, "f2", { senderRole: "owner" }));
++  await assertFails(send(REP, "f3", { deadlineAt: inDays(-1) }));
++  await assertFails(send(REP, "f4", { deadlineAt: null }));                       // a TASK needs a deadline
++  await assertFails(send(REP, "f5", { kind: "MESSAGE" }));                        // a MESSAGE has no deadline
++  await assertSucceeds(send(REP, "f6", { kind: "MESSAGE", deadlineAt: null }));
++  await assertFails(send(REP, "f7", { priority: "SUPER" }));
++  await assertFails(send(REP, "f8", { audience: "selected", recipients: [] }));
++  await assertFails(send(REP, "f9", { title: "" }));
++});
++
++test("promotion: only the owner changes roles, nobody promotes themselves", async () => {
++  await seedRoles();
++  await assertFails(db(MEMBER).doc(`communities/${CID}/members/${MEMBER}`).update({ role: "rep" }));
++  await assertFails(db(REP).doc(`communities/${CID}/members/${MEMBER}`).update({ role: "rep" }));
++  await assertSucceeds(db(OWNER).doc(`communities/${CID}/members/${MEMBER}`).update({ role: "rep" }));
++  await assertFails(db(OWNER).doc(`communities/${CID}/members/${MEMBER}`).update({ role: "owner" }));
++});
++
++test("members read 'all' messages and only 'selected' ones addressed to them", async () => {
++  await seedRoles();
++  await assertSucceeds(send(REP, "all1"));
++  await assertSucceeds(send(REP, "sel1", { audience: "selected", recipients: [MEMBER] }));
++  const msgs = (uid) => db(uid).collection(`communities/${CID}/messages`);
++  await assertSucceeds(db(MEMBER).doc(`communities/${CID}/messages/all1`).get());
++  await assertSucceeds(db(MEMBER).doc(`communities/${CID}/messages/sel1`).get());
++  await assertFails(db(OTHER).doc(`communities/${CID}/messages/sel1`).get());
++  await assertSucceeds(msgs(OTHER).where("audience", "==", "all").get());
++  await assertSucceeds(msgs(MEMBER).where("recipients", "array-contains", MEMBER).get());
++  await assertFails(msgs(OTHER).get());                                             // unfiltered list is not allowed for members
++  await assertSucceeds(msgs(REP).get());                                            // senders can list everything
++});
++
++test("outsiders cannot read a community or its messages", async () => {
++  await seedRoles(); await assertSucceeds(send(REP, "a1"));
++  await assertFails(db(OUTSIDER).doc(`communities/${CID}`).get());
++  await assertFails(db(OUTSIDER).doc(`communities/${CID}/messages/a1`).get());
++  await assertFails(db(OUTSIDER).doc(`communities/${CID}/members/${MEMBER}`).get());
++});
++
++test("members cannot read each other's membership documents", async () => {
++  await seedRoles();
++  await assertSucceeds(db(MEMBER).doc(`communities/${CID}/members/${MEMBER}`).get());
++  await assertFails(db(MEMBER).doc(`communities/${CID}/members/${OTHER}`).get());
++  await assertSucceeds(db(REP).doc(`communities/${CID}/members/${OTHER}`).get());   // senders pick recipients
++});
++
++test("members cannot edit or delete messages; senders can cancel their own", async () => {
++  await seedRoles(); await assertSucceeds(send(REP, "e1"));
++  const ref = (uid) => db(uid).doc(`communities/${CID}/messages/e1`);
++  await assertFails(ref(MEMBER).update({ cancelled: true, updatedAt: ts() }));
++  await assertFails(ref(MEMBER).delete());
++  await assertSucceeds(ref(REP).update({ cancelled: true, updatedAt: ts() }));
++  await assertFails(ref(REP).update({ senderId: MEMBER, updatedAt: ts() }));
++  await assertFails(ref(REP).update({ deadlineAt: inDays(-3), updatedAt: ts() }));
++  await assertSucceeds(ref(OWNER).delete());
++});
++
++test("task status: members write only their own, only for messages addressed to them", async () => {
++  await seedRoles();
++  await assertSucceeds(send(REP, "t1"));
++  await assertSucceeds(send(REP, "t2", { audience: "selected", recipients: [OTHER] }));
++  const status = (uid, mid, who = uid, done = true) =>
++    db(uid).doc(`communities/${CID}/messages/${mid}/status/${who}`).set({ uid: who, seen: true, done, doneAt: ts(), seenAt: ts(), updatedAt: ts() });
++  await assertSucceeds(status(MEMBER, "t1"));
++  await assertFails(status(MEMBER, "t1", OTHER));                                   // someone else's status
++  await assertFails(status(MEMBER, "t2"));                                          // not addressed to MEMBER
++  await assertSucceeds(db(REP).doc(`communities/${CID}/messages/t1/status/${MEMBER}`).get());   // senders see progress
++  await assertFails(db(OTHER).doc(`communities/${CID}/messages/t1/status/${MEMBER}`).get());
++});
++
++test("leaving and removal rules", async () => {
++  await seedRoles();
++  await assertFails(db(OWNER).doc(`communities/${CID}/members/${OWNER}`).delete());   // the owner cannot leave
++  await assertFails(db(REP).doc(`communities/${CID}/members/${MEMBER}`).delete());    // reps cannot remove people
++  await assertSucceeds(db(MEMBER).doc(`communities/${CID}/members/${MEMBER}`).delete());
++  await assertSucceeds(db(OWNER).doc(`communities/${CID}/members/${OTHER}`).delete());
++  await assertFails(db(MEMBER).doc(`communities/${CID}/messages/x`).get());           // removed members lose access
++});
++
++test("only the owner rotates the invite code", async () => {
++  await seedRoles();
++  await assertSucceeds(db(OWNER).doc(`communities/${CID}`).update({ joinCode: "QWER5678" }));
++  await assertFails(db(REP).doc(`communities/${CID}`).update({ joinCode: "QWER5679" }));
++  await assertFails(db(OWNER).doc(`communities/${CID}`).update({ joinCode: "bad" }));
++  await assertFails(db(OWNER).doc(`communities/${CID}`).update({ verified: true }));
++});
++
++test("invite codes can be fetched by exact code but never listed", async () => {
++  await createCommunity();
++  await assertSucceeds(db(OUTSIDER).doc(`joinCodes/${CODE}`).get());
++  await assertFails(db(OUTSIDER).collection("joinCodes").get());
++  await assertFails(db(MEMBER).doc(`joinCodes/QWER5678`).set({ communityId: CID, name: "x", createdBy: MEMBER, createdAt: ts() }));
++});
++
++test("private chat documents belong to their user", async () => {
++  await assertSucceeds(db(MEMBER).doc(`users/${MEMBER}/chat_memberships/${CID}`).set({ communityId: CID, name: "CSE A", joinedAt: ts() }));
++  await assertFails(db(OTHER).doc(`users/${MEMBER}/chat_memberships/${CID}`).get());
++  await assertSucceeds(db(MEMBER).doc(`users/${MEMBER}/chat_status/${CID}_m1`).set({ communityId: CID, messageId: "m1", seen: true, done: false, updatedAt: ts() }));
++  await assertFails(db(MEMBER).doc(`users/${MEMBER}/chat_status/wrongkey`).set({ communityId: CID, messageId: "m1", seen: true, done: false, updatedAt: ts() }));
++  await assertSucceeds(db(MEMBER).doc(`users/${MEMBER}/chat_devices/tok123`).set({ token: "tok123", platform: "android", updatedAt: ts() }));
++});
+diff --git a/firestore.indexes.json b/firestore.indexes.json
+new file mode 100644
+index 0000000..f225780
+--- /dev/null
++++ b/firestore.indexes.json
+@@ -0,0 +1,33 @@
++{
++  "indexes": [
++    {
++      "collectionGroup": "messages",
++      "queryScope": "COLLECTION",
++      "fields": [
++        {
++          "fieldPath": "audience",
++          "order": "ASCENDING"
++        },
++        {
++          "fieldPath": "createdAt",
++          "order": "DESCENDING"
++        }
++      ]
++    },
++    {
++      "collectionGroup": "messages",
++      "queryScope": "COLLECTION",
++      "fields": [
++        {
++          "fieldPath": "recipients",
++          "arrayConfig": "CONTAINS"
++        },
++        {
++          "fieldPath": "createdAt",
++          "order": "DESCENDING"
++        }
++      ]
++    }
++  ],
++  "fieldOverrides": []
++}
+diff --git a/firestore.rules b/firestore.rules
+index 991819d..e9d8c80 100644
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -54,6 +54,177 @@ service cloud.firestore {
+                       && request.resource.data.createdAt == resource.data.createdAt;
+         allow delete: if isOwner(userId);
+       }
++
++      // ---- CHATS: private per-user documents (own membership index, own task status, own push tokens)
++      match /chat_memberships/{communityId} {
++        allow read, delete: if isOwner(userId);
++        allow create, update: if isOwner(userId)
++          && request.resource.data.keys().hasOnly(['communityId', 'name', 'joinedAt'])
++          && request.resource.data.communityId == communityId
++          && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60;
++      }
++
++      match /chat_status/{statusKey} {
++        allow read, delete: if isOwner(userId);
++        allow create, update: if isOwner(userId)
++          && request.resource.data.keys().hasOnly(['communityId', 'messageId', 'seen', 'done', 'seenAt', 'doneAt', 'updatedAt'])
++          && request.resource.data.communityId is string && request.resource.data.messageId is string
++          && statusKey == request.resource.data.communityId + '_' + request.resource.data.messageId
++          && request.resource.data.seen is bool && request.resource.data.done is bool
++          && request.resource.data.updatedAt == request.time;
++      }
++
++      match /chat_devices/{token} {
++        allow read, delete: if isOwner(userId);
++        allow create, update: if isOwner(userId)
++          && request.resource.data.keys().hasOnly(['token', 'platform', 'updatedAt'])
++          && request.resource.data.token == token
++          && request.resource.data.updatedAt == request.time;
++      }
++    }
++
++    // =====================================================================================================
++    // CHATS: communities, members, messages/tasks.
++    //
++    // Who may send is decided HERE, not in the app:
++    //  - a member document's role is 'member' | 'rep' | 'owner';
++    //  - nobody can create a member document with role 'rep' or promote themselves; only the community
++    //    owner changes roles, and only between 'member' and 'rep';
++    //  - only 'rep' and 'owner' can create messages; members can only read messages addressed to them.
++    // 'verified' on a community is never writable by clients (set it from the Firebase console / Admin SDK).
++    // =====================================================================================================
++
++    function memberPath(cid, uid) { return /databases/$(database)/documents/communities/$(cid)/members/$(uid); }
++    function communityPath(cid) { return /databases/$(database)/documents/communities/$(cid); }
++    function isMember(cid) { return isAuthenticated() && exists(memberPath(cid, request.auth.uid)); }
++    function roleOf(cid) { return get(memberPath(cid, request.auth.uid)).data.role; }
++    function isSender(cid) { return isMember(cid) && roleOf(cid) in ['rep', 'owner']; }
++    function isCommunityOwner(cid) { return isMember(cid) && roleOf(cid) == 'owner'; }
++    function isOwnerAfter(cid) {
++      return existsAfter(memberPath(cid, request.auth.uid)) && getAfter(memberPath(cid, request.auth.uid)).data.role == 'owner';
++    }
++    function validPriority(p) { return p in ['LOW', 'NORMAL', 'HIGH', 'URGENT']; }
++
++    match /joinCodes/{code} {
++      // Anyone signed in can look a code up (get) but nobody can list/guess-scan the collection.
++      allow get: if isAuthenticated();
++      allow list: if false;
++      allow create: if isAuthenticated()
++        && code.matches('[A-Z2-9]{8}')
++        && request.resource.data.keys().hasOnly(['communityId', 'name', 'createdBy', 'createdAt'])
++        && request.resource.data.createdBy == request.auth.uid
++        && request.resource.data.createdAt == request.time
++        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60
++        && isOwnerAfter(request.resource.data.communityId);
++      allow update: if false;
++      allow delete: if isAuthenticated() && isCommunityOwner(resource.data.communityId);
++    }
++
++    match /communities/{cid} {
++      allow read: if isMember(cid);
++      allow create: if isAuthenticated()
++        && request.resource.data.keys().hasOnly(['name', 'kind', 'collegeName', 'ownerId', 'createdAt', 'verified', 'joinCode'])
++        && request.resource.data.ownerId == request.auth.uid
++        && request.resource.data.verified == false
++        && request.resource.data.joinCode is string && request.resource.data.joinCode.matches('[A-Z2-9]{8}')
++        && request.resource.data.kind in ['CLASS', 'CLUB', 'OTHER']
++        && request.resource.data.name is string && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 60
++        && request.resource.data.collegeName is string && request.resource.data.collegeName.size() <= 150
++        && request.resource.data.createdAt == request.time;
++      allow update: if isCommunityOwner(cid)
++        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'collegeName', 'joinCode'])
++        && request.resource.data.name is string && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 60
++        && request.resource.data.joinCode is string && request.resource.data.joinCode.matches('[A-Z2-9]{8}');
++      allow delete: if false;   // deleting would orphan messages; communities are left, not deleted
++
++      match /members/{memberId} {
++        allow read: if request.auth != null && (request.auth.uid == memberId || isSender(cid));
++        allow create: if isAuthenticated() && request.auth.uid == memberId
++          && request.resource.data.uid == memberId
++          && request.resource.data.displayName is string && request.resource.data.displayName.size() > 0 && request.resource.data.displayName.size() <= 60
++          && request.resource.data.joinedAt == request.time
++          && (
++            // (a) the creator becomes the owner (same batch as the community document)
++            ( request.resource.data.keys().hasOnly(['uid', 'displayName', 'role', 'joinedAt'])
++              && request.resource.data.role == 'owner'
++              && getAfter(communityPath(cid)).data.ownerId == request.auth.uid )
++            ||
++            // (b) anyone else joins as a plain member with a valid invite code
++            ( request.resource.data.keys().hasOnly(['uid', 'displayName', 'role', 'joinedAt', 'joinCode'])
++              && request.resource.data.role == 'member'
++              && request.resource.data.joinCode is string
++              && exists(/databases/$(database)/documents/joinCodes/$(request.resource.data.joinCode))
++              && get(/databases/$(database)/documents/joinCodes/$(request.resource.data.joinCode)).data.communityId == cid )
++          );
++        allow update: if isAuthenticated() && (
++          ( request.auth.uid == memberId
++            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
++            && request.resource.data.displayName is string && request.resource.data.displayName.size() > 0 && request.resource.data.displayName.size() <= 60 )
++          ||
++          ( isCommunityOwner(cid) && memberId != request.auth.uid
++            && resource.data.role in ['member', 'rep']
++            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role'])
++            && request.resource.data.role in ['member', 'rep'] )
++        );
++        allow delete: if isAuthenticated() && (
++          ( request.auth.uid == memberId && resource.data.role != 'owner' )      // leave
++          || ( isCommunityOwner(cid) && resource.data.role != 'owner' )           // owner removes someone
++        );
++      }
++
++      match /messages/{mid} {
++        allow read: if isSender(cid)
++          || (isMember(cid) && (resource.data.audience == 'all' || request.auth.uid in resource.data.recipients));
++
++        allow create: if isSender(cid)
++          && request.resource.data.keys().hasOnly(['kind', 'title', 'body', 'priority', 'deadlineAt', 'audience', 'recipients', 'senderId', 'senderName', 'senderRole', 'communityId', 'createdAt', 'updatedAt', 'cancelled'])
++          && request.resource.data.senderId == request.auth.uid
++          && request.resource.data.senderRole == roleOf(cid)
++          && request.resource.data.communityId == cid
++          && request.resource.data.senderName is string && request.resource.data.senderName.size() > 0 && request.resource.data.senderName.size() <= 60
++          && request.resource.data.kind in ['MESSAGE', 'TASK']
++          && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 100
++          && request.resource.data.body is string && request.resource.data.body.size() <= 2000
++          && validPriority(request.resource.data.priority)
++          && request.resource.data.audience in ['all', 'selected']
++          && request.resource.data.recipients is list && request.resource.data.recipients.size() <= 300
++          && (request.resource.data.audience == 'all' ? request.resource.data.recipients.size() == 0 : request.resource.data.recipients.size() > 0)
++          && (request.resource.data.kind == 'TASK'
++              ? (request.resource.data.deadlineAt is timestamp && request.resource.data.deadlineAt > request.time)
++              : request.resource.data.deadlineAt == null)
++          && request.resource.data.cancelled == false
++          && request.resource.data.createdAt == request.time
++          && request.resource.data.updatedAt == request.time;
++
++        allow update: if isSender(cid)
++          && (resource.data.senderId == request.auth.uid || isCommunityOwner(cid))
++          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'body', 'priority', 'deadlineAt', 'cancelled', 'updatedAt'])
++          && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 100
++          && request.resource.data.body is string && request.resource.data.body.size() <= 2000
++          && validPriority(request.resource.data.priority)
++          && request.resource.data.cancelled is bool
++          && (resource.data.kind == 'TASK'
++              ? (request.resource.data.deadlineAt is timestamp
++                 && (request.resource.data.deadlineAt == resource.data.deadlineAt || request.resource.data.deadlineAt > request.time))
++              : request.resource.data.deadlineAt == null)
++          && request.resource.data.updatedAt == request.time;
++
++        allow delete: if isSender(cid) && (resource.data.senderId == request.auth.uid || isCommunityOwner(cid));
++
++        // One document per member who has seen / completed a message. Senders read these for progress.
++        match /status/{uid} {
++          allow read: if isAuthenticated() && ((request.auth.uid == uid && isMember(cid)) || isSender(cid));
++          allow create, update: if isAuthenticated() && request.auth.uid == uid && isMember(cid)
++            && exists(/databases/$(database)/documents/communities/$(cid)/messages/$(mid))
++            && (get(/databases/$(database)/documents/communities/$(cid)/messages/$(mid)).data.audience == 'all'
++                || request.auth.uid in get(/databases/$(database)/documents/communities/$(cid)/messages/$(mid)).data.recipients)
++            && request.resource.data.keys().hasOnly(['uid', 'seen', 'done', 'seenAt', 'doneAt', 'updatedAt'])
++            && request.resource.data.uid == uid
++            && request.resource.data.seen is bool && request.resource.data.done is bool
++            && request.resource.data.updatedAt == request.time;
++          allow delete: if isAuthenticated() && request.auth.uid == uid;
++        }
++      }
+     }
+   }
+ }
+diff --git a/functions/index.js b/functions/index.js
+new file mode 100644
+index 0000000..9935f4d
+--- /dev/null
++++ b/functions/index.js
+@@ -0,0 +1,64 @@
++// OPTIONAL: instant push notifications for new CHATS messages/tasks.
++// Without this function the app still works: messages appear live while the app is open and are picked up by a
++// background sync (about every 15 minutes) when it is closed. This function makes delivery near-instant.
++//
++// Needs the Firebase Blaze (pay-as-you-go) plan:   cd functions && npm install && firebase deploy --only functions
++// NOT deployed or tested by the author of this file.
++const { onDocumentCreated } = require("firebase-functions/v2/firestore");
++const admin = require("firebase-admin");
++admin.initializeApp();
++
++const DB_ID = process.env.FIRESTORE_DATABASE_ID || "ai-studio-android-clg1-c3e120b1-448b-44b7-96ec-4127b50bcb87";
++
++exports.notifyNewChatMessage = onDocumentCreated(
++  { document: "communities/{cid}/messages/{mid}", database: DB_ID },
++  async (event) => {
++    const m = event.data && event.data.data();
++    if (!m || m.cancelled) return;
++    const { cid, mid } = event.params;
++    const db = admin.firestore(admin.app(), DB_ID);   // same named database the app uses
++
++    // 1. who should be notified
++    let uids;
++    if (m.audience === "selected") uids = m.recipients || [];
++    else {
++      const snap = await db.collection(`communities/${cid}/members`).get();
++      uids = snap.docs.map((d) => d.id);
++    }
++    uids = [...new Set(uids)].filter((u) => u !== m.senderId);
++    if (uids.length === 0) return;
++
++    // 2. their device tokens
++    const tokens = [];
++    for (let i = 0; i < uids.length; i += 20) {
++      const chunk = uids.slice(i, i + 20);
++      const lists = await Promise.all(chunk.map((u) => db.collection(`users/${u}/chat_devices`).get()));
++      lists.forEach((s) => s.docs.forEach((d) => tokens.push(d.id)));
++    }
++    if (tokens.length === 0) return;
++
++    // 3. data-only message: the app builds the notification itself (channel by priority, tap opens the chat)
++    const data = {
++      type: m.kind === "TASK" ? "task" : "message",
++      communityId: cid, messageId: mid, title: String(m.title).slice(0, 100),
++      sender: String(m.senderName || "").slice(0, 60), priority: String(m.priority || "NORMAL"),
++      deadlineMillis: m.deadlineAt ? String(m.deadlineAt.toMillis()) : "",
++    };
++    const priority = m.priority === "URGENT" || m.priority === "HIGH" ? "high" : "normal";
++    for (let i = 0; i < tokens.length; i += 500) {
++      const batch = tokens.slice(i, i + 500);
++      const res = await admin.messaging().sendEachForMulticast({ tokens: batch, data, android: { priority } });
++      // drop tokens that are no longer valid
++      const dead = [];
++      res.responses.forEach((r, idx) => {
++        const code = r.error && r.error.code;
++        if (code === "messaging/registration-token-not-registered" || code === "messaging/invalid-registration-token") dead.push(batch[idx]);
++      });
++      if (dead.length) {
++        const writer = db.bulkWriter();
++        for (const t of dead) for (const u of uids) writer.delete(db.doc(`users/${u}/chat_devices/${t}`)).catch(() => {});
++        await writer.close();
++      }
++    }
++  }
++);
+diff --git a/functions/package.json b/functions/package.json
+new file mode 100644
+index 0000000..1961c83
+--- /dev/null
++++ b/functions/package.json
+@@ -0,0 +1,10 @@
++{
++  "name": "clg1-chat-functions",
++  "private": true,
++  "engines": { "node": "20" },
++  "main": "index.js",
++  "dependencies": {
++    "firebase-admin": "^12.0.0",
++    "firebase-functions": "^6.0.0"
++  }
++}
+-- 
+2.43.0

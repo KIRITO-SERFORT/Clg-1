@@ -200,6 +200,18 @@ fun DashboardScreen(
 ) {
     var selectedTab by remember { mutableStateOf(DashboardTab.OVERVIEW) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showCgpa by remember { mutableStateOf(false) }
+
+    if (showCgpa) {
+        Dialog(
+            onDismissRequest = { showCgpa = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(modifier = Modifier.fillMaxSize()) {
+                CgpaCalculatorScreen(onClose = { showCgpa = false })
+            }
+        }
+    }
 
     if (showLogoutDialog) {
         AlertDialog(
@@ -354,7 +366,8 @@ fun DashboardScreen(
                                 subjects = subjects,
                                 targetThreshold = targetThreshold,
                                 studentName = studentName,
-                                collegeName = collegeName
+                                collegeName = collegeName,
+                                onOpenCgpa = { showCgpa = true }
                             )
                         }
 
@@ -1108,7 +1121,8 @@ private fun AnalyticsAndSimulatorTabContent(
     subjects: List<SubjectAttendance>,
     targetThreshold: Double,
     studentName: String = "",
-    collegeName: String = ""
+    collegeName: String = "",
+    onOpenCgpa: () -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
@@ -1598,6 +1612,33 @@ private fun AnalyticsAndSimulatorTabContent(
                         )
                     }
                 }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // CGPA Calculator Button below AI Analytics
+        Card(
+            onClick = onOpenCgpa,
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 600.dp)
+                .testTag("open_cgpa_calculator")
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "CGPA Calculator",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Work out your SGPA and CGPA from your grades, or see what you need to reach a target. Works for any college.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
             }
         }
 
