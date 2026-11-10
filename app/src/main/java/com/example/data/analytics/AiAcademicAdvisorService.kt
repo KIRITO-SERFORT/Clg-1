@@ -37,6 +37,31 @@ sealed interface AiAnalyticsUiState {
     data class Error(val message: String) : AiAnalyticsUiState
 }
 
+object AiDailyLimitStore {
+    private const val PREFS = "clg1_ai_daily_limit"
+    private const val MAX_PER_DAY = 2
+
+    private fun todayKey(): String {
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        return "count_${sdf.format(java.util.Date())}"
+    }
+
+    fun usedToday(context: android.content.Context): Int {
+        return context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+            .getInt(todayKey(), 0)
+    }
+
+    fun remainingToday(context: android.content.Context): Int {
+        return (MAX_PER_DAY - usedToday(context)).coerceAtLeast(0)
+    }
+
+    fun recordUse(context: android.content.Context) {
+        val prefs = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+        val key = todayKey()
+        prefs.edit().putInt(key, prefs.getInt(key, 0) + 1).apply()
+    }
+}
+
 class AiAcademicAdvisorService {
 
     // Lazy initialization of Firebase AI Logic model as mandated by guidelines
@@ -68,9 +93,10 @@ class AiAcademicAdvisorService {
             }
 
             Log.d(TAG, "Generating academic strategy via Firebase AI Logic (gemini-3.8-flash)")
-            // Mandated: realistic coroutine timeout between 30 and 60 seconds
-            val response = withTimeout(55_000L) {
-                model.generateContent(prompt)
+            val response = withTimeout(90_000L) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    model.generateContent(prompt)
+                }
             }
             val text = response.text
             if (!text.isNullOrBlank()) {
@@ -82,7 +108,7 @@ class AiAcademicAdvisorService {
             }
         } catch (e: TimeoutCancellationException) {
             Log.e(TAG, "Gemini AI analysis timed out", e)
-            throw IllegalStateException("AI analysis timed out after 55 seconds. Please try again.")
+            throw IllegalStateException("AI analysis timed out after 90 seconds. Please check your connection and try again.")
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

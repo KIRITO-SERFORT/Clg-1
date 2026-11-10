@@ -1401,6 +1401,7 @@ private fun AnalyticsAndSimulatorTabContent(
                 .fillMaxWidth()
                 .widthIn(max = 600.dp)
         ) {
+            var remainingToday by remember { mutableIntStateOf(com.example.data.analytics.AiDailyLimitStore.remainingToday(context)) }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1457,7 +1458,7 @@ private fun AnalyticsAndSimulatorTabContent(
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = if (hasRewardedAiCredit) "Active" else "Rewarded Ad",
+                            text = "$remainingToday/2 Left",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = ClgColors.Cyan,
                             maxLines = 1,
@@ -1486,9 +1487,11 @@ private fun AnalyticsAndSimulatorTabContent(
             when (val state = aiState) {
                 is AiAnalyticsUiState.Idle -> {
                     GradientButton(
-                        text = if (hasRewardedAiCredit) "Generate Gemini AI Strategy" else "Watch Ad to Unlock AI Strategy",
+                        text = if (remainingToday > 0) "Generate Gemini AI Strategy" else "Daily Limit Reached (2/2)",
                         onClick = {
-                            if (hasRewardedAiCredit) {
+                            if (com.example.data.analytics.AiDailyLimitStore.remainingToday(context) <= 0) {
+                                aiState = AiAnalyticsUiState.Error("Daily limit reached (2/2 AI analytics used today). Please try again tomorrow.")
+                            } else {
                                 coroutineScope.launch {
                                     aiState = AiAnalyticsUiState.Loading
                                     try {
@@ -1497,15 +1500,16 @@ private fun AnalyticsAndSimulatorTabContent(
                                             subjects = subjects,
                                             targetThreshold = targetThreshold,
                                             studentName = studentName.ifBlank { "Student" },
-                                            collegeName = collegeName.ifBlank { "College of Engineering" }
+                                            collegeName = collegeName.ifBlank { "College of Engineering" },
+                                            context = context
                                         )
+                                        com.example.data.analytics.AiDailyLimitStore.recordUse(context)
+                                        remainingToday = com.example.data.analytics.AiDailyLimitStore.remainingToday(context)
                                         aiState = AiAnalyticsUiState.Success(advice)
                                     } catch (e: Exception) {
                                         aiState = AiAnalyticsUiState.Error(e.message ?: "Failed to generate AI analytics")
                                     }
                                 }
-                            } else {
-                                showRewardedAd = true
                             }
                         },
                         modifier = Modifier.fillMaxWidth().testTag("generate_ai_analytics_button")
