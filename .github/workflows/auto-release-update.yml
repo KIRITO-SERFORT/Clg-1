@@ -111,6 +111,7 @@ jobs:
           node -e '
             const admin = require("firebase-admin");
             const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+            console.log("Using Firebase project_id:", serviceAccount.project_id);
             admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
             const db = admin.firestore();
             db.collection("app_config").doc("latest_release").set({
