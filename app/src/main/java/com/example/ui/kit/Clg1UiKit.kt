@@ -426,17 +426,109 @@ fun AnimatedNumber(value: Float, modifier: Modifier = Modifier, decimals: Int = 
 fun ProgressRing(progress: Float, modifier: Modifier = Modifier, size: Dp = 140.dp, strokeWidth: Dp = 12.dp, content: @Composable BoxScope.() -> Unit = {}) {
     val p by animateFloatAsState(progress.coerceIn(0f, 1f), tween(1100, easing = FastOutSlowInEasing), label = "ring")
     val track = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+    val context = LocalContext.current
+    val palette = com.example.ui.theme.ClgThemeStore.load(context)
+    val reduceMotion = com.example.ui.ux.rememberUxReduceMotion()
+    val infinite = rememberInfiniteTransition(label = "ring_motion")
+    val phase by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2600, easing = LinearEasing)),
+        label = "ring_phase"
+    )
+    val activePhase = if (reduceMotion) 0f else phase
+
     Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
-        val ringColors = listOf(MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.primary, Color.White)
+        val primary = MaterialTheme.colorScheme.primary
+        val secondary = MaterialTheme.colorScheme.secondary
+        val tertiary = MaterialTheme.colorScheme.tertiary
+        val ringColors = listOf(secondary, primary, tertiary, primary)
+
         Canvas(Modifier.fillMaxSize()) {
             val stroke = Stroke(width = strokeWidth.toPx(), cap = StrokeCap.Round)
             val inset = strokeWidth.toPx() / 2
             val arcSize = Size(this.size.width - inset * 2, this.size.height - inset * 2)
+            val innerRadius = (this.size.minDimension / 2f) - strokeWidth.toPx()
+
+            // Inner theme-matched motion graphics
+            if (!reduceMotion && innerRadius > 0f) {
+                val center = Offset(this.size.width / 2f, this.size.height / 2f)
+                when (palette) {
+                    com.example.ui.theme.ClgPalette.SUNSET,
+                    com.example.ui.theme.ClgPalette.BLACK_RED,
+                    com.example.ui.theme.ClgPalette.SAKURA -> {
+                        // Plasma Shimmer + Fire embers
+                        val sweepX = this.size.width * (-0.5f + 2f * activePhase)
+                        drawCircle(
+                            brush = Brush.linearGradient(
+                                colors = listOf(Color.Transparent, primary.copy(alpha = 0.16f), secondary.copy(alpha = 0.12f), Color.Transparent),
+                                start = Offset(sweepX, 0f),
+                                end = Offset(sweepX + this.size.width * 0.7f, this.size.height)
+                            ),
+                            radius = innerRadius,
+                            center = center
+                        )
+                        for (i in 0..5) {
+                            val t = (activePhase + i * 0.17f) % 1f
+                            val ex = center.x + sin((t * 4f + i) * Math.PI).toFloat() * innerRadius * 0.45f
+                            val ey = center.y + innerRadius * (0.65f - 1.3f * t)
+                            drawCircle(primary.copy(alpha = (1f - t) * 0.45f), 2.5f + (i % 3), Offset(ex, ey))
+                        }
+                    }
+                    com.example.ui.theme.ClgPalette.FOREST,
+                    com.example.ui.theme.ClgPalette.AMOLED,
+                    com.example.ui.theme.ClgPalette.AURORA,
+                    com.example.ui.theme.ClgPalette.PURPLE -> {
+                        // Matrix / Waterfall vertical light streams
+                        for (col in 0..4) {
+                            val t = (activePhase + col * 0.21f) % 1f
+                            val x = center.x + (col - 2) * (innerRadius * 0.34f)
+                            val y = center.y - innerRadius * 0.7f + t * innerRadius * 1.4f
+                            drawLine(
+                                color = primary.copy(alpha = (1f - t) * 0.35f),
+                                start = Offset(x, y - 14f),
+                                end = Offset(x, y + 6f),
+                                strokeWidth = 3f,
+                                cap = StrokeCap.Round
+                            )
+                        }
+                    }
+                    com.example.ui.theme.ClgPalette.GRAPHITE,
+                    com.example.ui.theme.ClgPalette.PAPER -> {
+                        // Liquid Ink Bleed pulsing aura
+                        val pulse = 0.5f + 0.5f * sin(activePhase * 2f * Math.PI).toFloat()
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                listOf(primary.copy(alpha = 0.18f * pulse), Color.Transparent),
+                                center = center,
+                                radius = innerRadius * (0.55f + 0.35f * pulse)
+                            ),
+                            radius = innerRadius,
+                            center = center
+                        )
+                    }
+                    else -> {
+                        // Water Flow / Mist dual-wave shimmer
+                        val waveOffset = activePhase * 2f * Math.PI.toFloat()
+                        for (step in -3..3) {
+                            val x = center.x + step * (innerRadius * 0.24f)
+                            val y = center.y + innerRadius * 0.35f + sin(waveOffset + step * 0.9f) * 6f
+                            drawCircle(primary.copy(alpha = 0.18f), 8f, Offset(x, y))
+                        }
+                    }
+                }
+            }
+
             drawArc(track, 0f, 360f, false, Offset(inset, inset), arcSize, style = stroke)
-            rotate(-90f) {
+            rotate(-90f + activePhase * 360f) {
                 drawArc(
                     Brush.sweepGradient(ringColors),
-                    startAngle = 0f, sweepAngle = 360f * p, useCenter = false, topLeft = Offset(inset, inset), size = arcSize, style = stroke
+                    startAngle = -activePhase * 360f,
+                    sweepAngle = 360f * p,
+                    useCenter = false,
+                    topLeft = Offset(inset, inset),
+                    size = arcSize,
+                    style = stroke
                 )
             }
         }

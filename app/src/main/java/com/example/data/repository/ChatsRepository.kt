@@ -45,7 +45,10 @@ class ChatsRepository {
         val uid = currentUserId() ?: return Result.failure(IllegalStateException("Not signed in"))
         return try {
             usersCollection.document(uid)
-                .update(mapOf("role" to role, "updatedAt" to FieldValue.serverTimestamp()))
+                .set(
+                    mapOf("role" to role, "updatedAt" to FieldValue.serverTimestamp()),
+                    com.google.firebase.firestore.SetOptions.merge()
+                )
                 .await()
             Result.success(Unit)
         } catch (e: Exception) {

@@ -540,33 +540,138 @@ private fun OverviewTabContent(
                     contentAlignment = Alignment.Center
                 ) {
                     val strokeBg = MaterialTheme.colorScheme.surfaceVariant
+                    val palette = com.example.ui.theme.ClgThemeStore.load(context)
+                    val reduceMotion = com.example.ui.ux.rememberUxReduceMotion()
+                    val ringInfinite = androidx.compose.animation.core.rememberInfiniteTransition(label = "dash_ring_motion")
+                    val ringPhase by ringInfinite.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 1f,
+                        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                            animation = tween(2600, easing = androidx.compose.animation.core.LinearEasing)
+                        ),
+                        label = "dash_ring_phase"
+                    )
+                    val activePhase = if (reduceMotion) 0f else ringPhase
+                    val primaryColor = MaterialTheme.colorScheme.primary
+                    val secondaryColor = MaterialTheme.colorScheme.secondary
+                    val tertiaryColor = MaterialTheme.colorScheme.tertiary
+
                     Canvas(modifier = Modifier.size(190.dp)) {
+                        val strokePx = 16.dp.toPx()
+                        val innerRadius = (size.minDimension / 2f) - strokePx
+
+                        if (!reduceMotion && innerRadius > 0f) {
+                            val center = Offset(size.width / 2f, size.height / 2f)
+                            when (palette) {
+                                com.example.ui.theme.ClgPalette.SUNSET,
+                                com.example.ui.theme.ClgPalette.BLACK_RED,
+                                com.example.ui.theme.ClgPalette.SAKURA -> {
+                                    // Plasma Shimmer & Fire Embers
+                                    val sweepX = size.width * (-0.5f + 2f * activePhase)
+                                    drawCircle(
+                                        brush = Brush.linearGradient(
+                                            colors = listOf(Color.Transparent, primaryColor.copy(alpha = 0.18f), secondaryColor.copy(alpha = 0.14f), Color.Transparent),
+                                            start = Offset(sweepX, 0f),
+                                            end = Offset(sweepX + size.width * 0.7f, size.height)
+                                        ),
+                                        radius = innerRadius,
+                                        center = center
+                                    )
+                                    for (i in 0..5) {
+                                        val t = (activePhase + i * 0.17f) % 1f
+                                        val ex = center.x + kotlin.math.sin((t * 4f + i) * Math.PI).toFloat() * innerRadius * 0.45f
+                                        val ey = center.y + innerRadius * (0.65f - 1.3f * t)
+                                        drawCircle(primaryColor.copy(alpha = (1f - t) * 0.5f), 3f + (i % 3), Offset(ex, ey))
+                                    }
+                                }
+                                com.example.ui.theme.ClgPalette.FOREST,
+                                com.example.ui.theme.ClgPalette.AMOLED,
+                                com.example.ui.theme.ClgPalette.AURORA,
+                                com.example.ui.theme.ClgPalette.PURPLE -> {
+                                    // Matrix / Waterfall Streams
+                                    for (col in 0..4) {
+                                        val t = (activePhase + col * 0.21f) % 1f
+                                        val x = center.x + (col - 2) * (innerRadius * 0.34f)
+                                        val y = center.y - innerRadius * 0.7f + t * innerRadius * 1.4f
+                                        drawLine(
+                                            color = primaryColor.copy(alpha = (1f - t) * 0.4f),
+                                            start = Offset(x, y - 16f),
+                                            end = Offset(x, y + 6f),
+                                            strokeWidth = 3.5f,
+                                            cap = StrokeCap.Round
+                                        )
+                                    }
+                                }
+                                com.example.ui.theme.ClgPalette.GRAPHITE,
+                                com.example.ui.theme.ClgPalette.PAPER -> {
+                                    // Liquid Ink Bleed
+                                    val pulse = 0.5f + 0.5f * kotlin.math.sin(activePhase * 2f * Math.PI).toFloat()
+                                    drawCircle(
+                                        brush = Brush.radialGradient(
+                                            listOf(primaryColor.copy(alpha = 0.22f * pulse), Color.Transparent),
+                                            center = center,
+                                            radius = innerRadius * (0.55f + 0.35f * pulse)
+                                        ),
+                                        radius = innerRadius,
+                                        center = center
+                                    )
+                                }
+                                else -> {
+                                    // Water Flow / Mist
+                                    val waveOffset = activePhase * 2f * Math.PI.toFloat()
+                                    for (step in -3..3) {
+                                        val x = center.x + step * (innerRadius * 0.24f)
+                                        val y = center.y + innerRadius * 0.35f + kotlin.math.sin(waveOffset + step * 0.9f) * 7f
+                                        drawCircle(primaryColor.copy(alpha = 0.2f), 9f, Offset(x, y))
+                                    }
+                                }
+                            }
+                        }
+
                         drawArc(
                             color = strokeBg,
                             startAngle = -90f,
                             sweepAngle = 360f,
                             useCenter = false,
-                            style = Stroke(width = 16.dp.toPx(), cap = StrokeCap.Round)
+                            style = Stroke(width = strokePx, cap = StrokeCap.Round)
                         )
                         if (!isFreshWorkspace) {
+                            val themeShades = listOf(
+                                primaryColor,
+                                primaryColor.copy(alpha = 0.72f),
+                                secondaryColor,
+                                primaryColor.copy(alpha = 0.88f),
+                                primaryColor
+                            )
                             drawArc(
-                                color = statusColor,
+                                brush = Brush.sweepGradient(themeShades),
                                 startAngle = -90f,
                                 sweepAngle = animatedSweep,
                                 useCenter = false,
-                                style = Stroke(width = 16.dp.toPx(), cap = StrokeCap.Round)
+                                style = Stroke(width = strokePx, cap = StrokeCap.Round)
                             )
                         }
                     }
 
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        val textBrush = Brush.linearGradient(
+                            colors = listOf(
+                                primaryColor,
+                                secondaryColor,
+                                primaryColor.copy(alpha = 0.75f),
+                                primaryColor
+                            ),
+                            start = Offset(-150f + 350f * activePhase, 0f),
+                            end = Offset(100f + 350f * activePhase, 100f)
+                        )
                         Text(
                             text = if (isFreshWorkspace) "0.0%" else summary.formattedPercentage,
                             style = MaterialTheme.typography.displaySmall.copy(
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 38.sp
+                                fontSize = 38.sp,
+                                brush = if (reduceMotion) null else textBrush
                             ),
-                            color = statusColor
+                            color = if (reduceMotion) primaryColor else Color.Unspecified
                         )
                         Text(
                             text = if (isFreshWorkspace) "Clean Workspace" else "Target: $targetPercent%",
