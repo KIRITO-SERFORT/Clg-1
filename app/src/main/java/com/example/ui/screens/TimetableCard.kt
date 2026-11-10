@@ -99,8 +99,12 @@ fun TimetableCard(
         ) {
             val tt = timetable
             val noOfDays = tt?.noOfDays ?: 5
-            val todayOrder = if (tt != null && anchor != null) {
-                DayOrderCalculator.todayDayOrder(anchor!!, tt.noOfDays)
+            val todayOrder = if (tt != null) {
+                if (anchor != null) {
+                    DayOrderCalculator.todayDayOrder(anchor!!, tt.noOfDays)
+                } else {
+                    DayOrderCalculator.deviceWeekdayDayOrder(tt.noOfDays)
+                }
             } else {
                 null
             }

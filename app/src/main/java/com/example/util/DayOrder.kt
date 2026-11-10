@@ -119,4 +119,20 @@ object DayOrderCalculator {
 
     fun isWeekendToday(workingDays: Set<Int> = DEFAULT_WORKING_DAYS): Boolean =
         isWeekend(SimpleDate.today(), workingDays)
+
+    /** Maps the device's current day of the week to Day 1..noOfDays (Mon=1, Tue=2, ..., Fri=5). */
+    fun deviceWeekdayDayOrder(noOfDays: Int): Int {
+        val days = noOfDays.coerceAtLeast(1)
+        val cal = Calendar.getInstance()
+        val rawDay = when (cal.get(Calendar.DAY_OF_WEEK)) {
+            Calendar.MONDAY -> 1
+            Calendar.TUESDAY -> 2
+            Calendar.WEDNESDAY -> 3
+            Calendar.THURSDAY -> 4
+            Calendar.FRIDAY -> 5
+            Calendar.SATURDAY -> if (days >= 6) 6 else 1
+            else -> 1 // Sunday -> Monday (Day 1)
+        }
+        return ((rawDay - 1) % days) + 1
+    }
 }
