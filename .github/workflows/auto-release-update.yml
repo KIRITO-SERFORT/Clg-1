@@ -81,13 +81,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Firestore latest_release
-        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Push version info to Firestore
-        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        if: ${{ env.FIREBASE_SERVICE_ACCOUNT != '' }}
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           APK_URL: "https://github.com/${{ github.repository }}/releases/download/${{ steps.meta.outputs.tag }}/app-debug.apk"
