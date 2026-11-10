@@ -1945,27 +1945,13 @@ private fun SettingsTabContent(
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf(
-                    ThemeMode.SYSTEM to "System",
-                    ThemeMode.LIGHT to "Light",
-                    ThemeMode.DARK to "Dark"
-                ).forEach { (mode, label) ->
-                    FilterChip(
-                        selected = themeMode == mode,
-                        onClick = { onThemeModeChange(mode) },
-                        label = { Text(label) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
+            val (palette, setPalette) = com.example.ui.theme.rememberClgPalette()
+            com.example.ui.theme.ClgThemePicker(
+                selected = palette,
+                onSelect = setPalette,
+                themeMode = themeMode,
+                onModeChange = onThemeModeChange
+            )
         }
 
         // ---------------- Alerts & goals ----------------
@@ -2972,9 +2958,11 @@ private fun UpiPayDialog(onDismiss: () -> Unit) {
                     Text("Copy UPI ID")
                 }
 
+                var showPaymentAppsDialog by remember { mutableStateOf(false) }
+
                 Button(
                     onClick = {
-                        openPaymentAppHomeScreen(context)
+                        showPaymentAppsDialog = true
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2988,6 +2976,70 @@ private fun UpiPayDialog(onDismiss: () -> Unit) {
                     Text(
                         text = "Go to Payment App",
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+
+                if (showPaymentAppsDialog) {
+                    val installedPaymentApps = remember {
+                        val pm = context.packageManager
+                        val knownPackages = listOf(
+                            "com.google.android.apps.nbu.paisa.user" to "Google Pay (GPay)",
+                            "com.phonepe.app" to "PhonePe",
+                            "net.one97.paytm" to "Paytm",
+                            "com.fampay.in" to "FamPay",
+                            "in.org.npci.upiapp" to "BHIM UPI",
+                            "in.amazon.mShop.android.shopping" to "Amazon Pay"
+                        )
+                        val found = mutableListOf<Pair<String, String>>()
+                        knownPackages.forEach { (pkg, label) ->
+                            if (pm.getLaunchIntentForPackage(pkg) != null) {
+                                found.add(pkg to label)
+                            }
+                        }
+                        val upiIntent = Intent(Intent.ACTION_VIEW, Uri.parse("upi://pay"))
+                        pm.queryIntentActivities(upiIntent, 0).forEach { resolveInfo ->
+                            val pkg = resolveInfo.activityInfo.packageName
+                            if (found.none { it.first == pkg } && pm.getLaunchIntentForPackage(pkg) != null) {
+                                val label = resolveInfo.loadLabel(pm).toString()
+                                found.add(pkg to label)
+                            }
+                        }
+                        found
+                    }
+
+                    AlertDialog(
+                        onDismissRequest = { showPaymentAppsDialog = false },
+                        title = { Text("Select Payment App") },
+                        text = {
+                            if (installedPaymentApps.isEmpty()) {
+                                Text("No UPI or payment apps found on this device.")
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    installedPaymentApps.forEach { (pkg, label) ->
+                                        OutlinedButton(
+                                            onClick = {
+                                                showPaymentAppsDialog = false
+                                                val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
+                                                if (launchIntent != null) {
+                                                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                    context.startActivity(launchIntent)
+                                                } else {
+                                                    Toast.makeText(context, "Unable to open $label", Toast.LENGTH_SHORT).show()
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(label)
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showPaymentAppsDialog = false }) {
+                                Text("Cancel")
+                            }
+                        }
                     )
                 }
             }

@@ -190,6 +190,8 @@ enum class ClgPalette(val id: String, val label: String, val blurb: String) {
     SAKURA("sakura", "Sakura", "Soft pink and plum, gentle and bright."),
     GRAPHITE("graphite", "Graphite", "Neutral greys. Minimal and distraction free."),
     AMOLED("amoled", "AMOLED Black", "True black in dark mode: saves battery on OLED screens."),
+    PURPLE("purple", "Purple", "Royal purple with lavender accents."),
+    BLACK_RED("black_red", "Black & Red", "True black with bold crimson red."),
     PAPER("paper", "Paper", "Warm cream and brown, like a printed notebook."),
     DYNAMIC("dynamic", "Material You", "Follows your wallpaper colours (Android 12 or newer).");
 
@@ -207,6 +209,8 @@ internal fun ClgPalette.spec(): ClgPaletteSpec = when (this) {
     ClgPalette.SAKURA -> ClgPaletteSpec(id, label, blurb, 0xFFF06292.toInt(), 0xFFBA68C8.toInt(), 0xFFFFB74D.toInt(), 0xFF170A12.toInt(), 0xFFFFF7FA.toInt())
     ClgPalette.GRAPHITE -> ClgPaletteSpec(id, label, blurb, 0xFFB0BEC5.toInt(), 0xFF90A4AE.toInt(), 0xFFCFD8DC.toInt(), 0xFF101214.toInt(), 0xFFF5F6F7.toInt())
     ClgPalette.AMOLED -> ClgPaletteSpec(id, label, blurb, 0xFF00E5FF.toInt(), 0xFF69F0AE.toInt(), 0xFFFFD740.toInt(), 0xFF000000.toInt(), 0xFFF2F8FF.toInt(), amoled = true)
+    ClgPalette.PURPLE -> ClgPaletteSpec(id, label, blurb, 0xFFAB47BC.toInt(), 0xFFCE93D8.toInt(), 0xFF7E57C2.toInt(), 0xFF100718.toInt(), 0xFFF9F2FF.toInt())
+    ClgPalette.BLACK_RED -> ClgPaletteSpec(id, label, blurb, 0xFFFF1744.toInt(), 0xFFFF5252.toInt(), 0xFFFF8A80.toInt(), 0xFF000000.toInt(), 0xFFFFF5F5.toInt(), amoled = true)
     ClgPalette.PAPER -> ClgPaletteSpec(id, label, blurb, 0xFF8D5A2B.toInt(), 0xFF6B7F3A.toInt(), 0xFFB5543A.toInt(), 0xFF14110D.toInt(), 0xFFFAF6EE.toInt())
 }
 

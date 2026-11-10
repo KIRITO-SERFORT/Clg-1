@@ -123,28 +123,28 @@ import kotlin.math.sin
 // ============================================================================================
 
 object ClgColors {
-    val Navy = Color(0xFF010824)          // sampled from the logo background
-    val NavyDeep = Color(0xFF04122F)
-    val NavySurface = Color(0xFF0A1433)
-    val NavyCard = Color(0xFF111C40)
-    val Cyan = Color(0xFF00F0FF)          // logo accent
-    val CyanDeep = Color(0xFF00B8D4)
-    val White = Color(0xFFFFFFFF)
-    val TextMuted = Color(0xFF9AA7C7)
-    val Outline = Color(0xFF2A3969)
-    val Success = Color(0xFF4ADE80)
+    val Navy: Color @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable get() = MaterialTheme.colorScheme.background
+    val NavyDeep: Color @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerLowest
+    val NavySurface: Color @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable get() = MaterialTheme.colorScheme.surface
+    val NavyCard: Color @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainer
+    val Cyan: Color @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
+    val CyanDeep: Color @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable get() = MaterialTheme.colorScheme.secondary
+    val White: Color @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurface
+    val TextMuted: Color @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
+    val Outline: Color @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable get() = MaterialTheme.colorScheme.outlineVariant
+    val Success: Color @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable get() = MaterialTheme.colorScheme.tertiary
     val Warning = Color(0xFFFFB74D)
-    val Danger = Color(0xFFFF6B6B)
+    val Danger: Color @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable get() = MaterialTheme.colorScheme.error
 }
 
 private val DarkScheme = darkColorScheme(
-    primary = ClgColors.Cyan, onPrimary = ClgColors.Navy,
-    secondary = ClgColors.CyanDeep, onSecondary = ClgColors.Navy,
-    tertiary = ClgColors.Success,
-    background = ClgColors.Navy, onBackground = ClgColors.White,
-    surface = ClgColors.NavySurface, onSurface = ClgColors.White,
-    surfaceVariant = ClgColors.NavyCard, onSurfaceVariant = ClgColors.TextMuted,
-    outline = ClgColors.Outline, error = ClgColors.Danger
+    primary = Color(0xFF00F0FF), onPrimary = Color(0xFF010824),
+    secondary = Color(0xFF00B8D4), onSecondary = Color(0xFF010824),
+    tertiary = Color(0xFF4ADE80),
+    background = Color(0xFF010824), onBackground = Color(0xFFFFFFFF),
+    surface = Color(0xFF0A1433), onSurface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFF111C40), onSurfaceVariant = Color(0xFF9AA7C7),
+    outline = Color(0xFF2A3969), error = Color(0xFFFF6B6B)
 )
 
 private val LightScheme = lightColorScheme(
@@ -283,23 +283,25 @@ fun LoadingScreen(
             .semantics { contentDescription = "CLG 1 percent is loading" },
         contentAlignment = Alignment.Center
     ) {
+        val particleColor = MaterialTheme.colorScheme.primary
         if (!reduceMotion) Canvas(Modifier.fillMaxSize()) {           // rising particles = growth
             for (i in 0 until 18) {
                 val seed = (i * 0.61803f) % 1f
                 val t = (particles + seed) % 1f
                 val x = size.width * (0.12f + 0.76f * ((i * 37 % 100) / 100f)) + 14f * sin((t * 2 * PI + i).toFloat())
                 val y = size.height * (1.05f - 1.1f * t)
-                drawCircle(ClgColors.Cyan.copy(alpha = (1f - t) * 0.55f * (0.4f + 0.6f * seed)), 2.5f + 4f * seed, Offset(x, y))
+                drawCircle(particleColor.copy(alpha = (1f - t) * 0.55f * (0.4f + 0.6f * seed)), 2.5f + 4f * seed, Offset(x, y))
             }
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.size(240.dp)) {
+                val pulseCyan = ClgColors.Cyan
                 if (!reduceMotion) Canvas(Modifier.fillMaxSize()) {   // pulsing glow rings
                     for (k in 0..1) {
                         val t = (pulse + k * 0.5f) % 1f
                         drawCircle(
-                            Brush.radialGradient(listOf(ClgColors.Cyan.copy(alpha = 0.28f * (1f - t)), Color.Transparent)),
+                            Brush.radialGradient(listOf(pulseCyan.copy(alpha = 0.28f * (1f - t)), Color.Transparent)),
                             radius = size.minDimension * (0.35f + 0.25f * t)
                         )
                     }
@@ -345,14 +347,15 @@ fun LoadingScreen(
             )
             Spacer(Modifier.height(16.dp))
             Box(Modifier.width(180.dp).height(4.dp).alpha(barAlpha.value)) {
+                val barCyan = ClgColors.Cyan
                 Canvas(Modifier.fillMaxSize()) {
                     val r = CornerRadius(size.height / 2)
                     drawRoundRect(Color.White.copy(alpha = 0.12f), cornerRadius = r)
                     if (progress != null) {
-                        drawRoundRect(ClgColors.Cyan, size = Size(size.width * progress.coerceIn(0f, 1f), size.height), cornerRadius = r)
+                        drawRoundRect(barCyan, size = Size(size.width * progress.coerceIn(0f, 1f), size.height), cornerRadius = r)
                     } else {
                         val w = size.width * 0.35f; val x = (size.width + w) * barLoop - w
-                        drawRoundRect(Brush.horizontalGradient(listOf(Color.Transparent, ClgColors.Cyan, Color.Transparent), startX = x, endX = x + w), cornerRadius = r)
+                        drawRoundRect(Brush.horizontalGradient(listOf(Color.Transparent, barCyan, Color.Transparent), startX = x, endX = x + w), cornerRadius = r)
                     }
                 }
             }
@@ -367,13 +370,13 @@ fun LoadingScreen(
 /** Screen background: deep navy gradient with a soft cyan glow at the top. */
 @Composable
 fun ClgBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
-    val dark = MaterialTheme.colorScheme.background == ClgColors.Navy
+    val bgGlow = ClgColors.Cyan
     Box(
         modifier = modifier.fillMaxSize()
-            .background(if (dark) Brush.verticalGradient(listOf(ClgColors.Navy, ClgColors.NavyDeep)) else Brush.verticalGradient(listOf(Color(0xFFF4F8FF), Color(0xFFE9F1FF))))
+            .background(Brush.verticalGradient(listOf(ClgColors.Navy, ClgColors.NavyDeep)))
             .drawBehind {
-                if (dark) drawCircle(
-                    Brush.radialGradient(listOf(ClgColors.Cyan.copy(alpha = 0.16f), Color.Transparent), center = Offset(size.width * 0.85f, 0f), radius = size.width * 0.8f),
+                drawCircle(
+                    Brush.radialGradient(listOf(bgGlow.copy(alpha = 0.16f), Color.Transparent), center = Offset(size.width * 0.85f, 0f), radius = size.width * 0.8f),
                     radius = size.width * 0.8f, center = Offset(size.width * 0.85f, 0f)
                 )
             },
@@ -424,6 +427,7 @@ fun ProgressRing(progress: Float, modifier: Modifier = Modifier, size: Dp = 140.
     val p by animateFloatAsState(progress.coerceIn(0f, 1f), tween(1100, easing = FastOutSlowInEasing), label = "ring")
     val track = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
     Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
+        val ringColors = listOf(MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.primary, Color.White)
         Canvas(Modifier.fillMaxSize()) {
             val stroke = Stroke(width = strokeWidth.toPx(), cap = StrokeCap.Round)
             val inset = strokeWidth.toPx() / 2
@@ -431,7 +435,7 @@ fun ProgressRing(progress: Float, modifier: Modifier = Modifier, size: Dp = 140.
             drawArc(track, 0f, 360f, false, Offset(inset, inset), arcSize, style = stroke)
             rotate(-90f) {
                 drawArc(
-                    Brush.sweepGradient(listOf(ClgColors.CyanDeep, ClgColors.Cyan, Color.White)),
+                    Brush.sweepGradient(ringColors),
                     startAngle = 0f, sweepAngle = 360f * p, useCenter = false, topLeft = Offset(inset, inset), size = arcSize, style = stroke
                 )
             }

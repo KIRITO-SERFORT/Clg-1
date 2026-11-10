@@ -43,14 +43,26 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val viewModel: AttendanceViewModel = viewModel()
-            val themeMode by viewModel.themeModeFlow.collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
+            val themeMode by viewModel.themeModeFlow.collectAsStateWithLifecycle(initialValue = ThemeMode.DARK)
             val isDark = when (themeMode) {
                 ThemeMode.DARK -> true
                 ThemeMode.LIGHT -> false
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
             }
+            val context = androidx.compose.ui.platform.LocalContext.current
+            var palette by remember { mutableStateOf(com.example.ui.theme.ClgThemeStore.load(context)) }
+            DisposableEffect(context) {
+                val prefs = context.getSharedPreferences("clg1_theme", android.content.Context.MODE_PRIVATE)
+                val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                    if (key == "palette") {
+                        palette = com.example.ui.theme.ClgThemeStore.load(context)
+                    }
+                }
+                prefs.registerOnSharedPreferenceChangeListener(listener)
+                onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+            }
 
-            ClgTheme(darkTheme = isDark) {
+            com.example.ui.theme.ClgPaletteTheme(themeMode = themeMode, palette = palette) {
                 com.example.ui.components.AppUpdateChecker()
                 val uiState by viewModel.uiState.collectAsStateWithLifecycle()
                 val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
