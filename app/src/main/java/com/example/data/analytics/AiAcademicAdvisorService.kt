@@ -55,18 +55,29 @@ class AiAcademicAdvisorService {
         subjects: List<SubjectAttendance>,
         targetThreshold: Double,
         studentName: String,
-        collegeName: String
+        collegeName: String,
+        context: android.content.Context? = null
     ): String {
         return try {
             val prompt = buildAdvisorPrompt(summary, subjects, targetThreshold, studentName, collegeName)
+            val byokKey = context?.let { ByokStore.loadKey(it) }
+            if (byokKey != null) {
+                val byokProvider = ByokStore.loadProvider(context)
+                Log.d(TAG, "Generating academic strategy via BYOK provider: ${byokProvider.label}")
+                return ByokAdvisorClient().complete(byokProvider, byokKey, prompt)
+            }
+
+            Log.d(TAG, "Generating academic strategy via Firebase AI Logic (gemini-3.8-flash)")
             // Mandated: realistic coroutine timeout between 30 and 60 seconds
             val response = withTimeout(55_000L) {
                 model.generateContent(prompt)
             }
             val text = response.text
             if (!text.isNullOrBlank()) {
+                Log.d(TAG, "Firebase AI Logic generation succeeded (${text.length} chars)")
                 text.trim()
             } else {
+                Log.e(TAG, "Firebase AI Logic returned empty text")
                 throw IllegalStateException("Gemini returned an empty academic recommendation.")
             }
         } catch (e: TimeoutCancellationException) {

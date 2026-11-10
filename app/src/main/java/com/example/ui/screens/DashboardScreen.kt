@@ -1438,16 +1438,37 @@ private fun AnalyticsAndSimulatorTabContent(
                     }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(ClgColors.Cyan.copy(alpha = 0.15f))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = if (hasRewardedAiCredit) "Active" else "Rewarded Ad",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = ClgColors.Cyan
+                var showByokDialog by remember { mutableStateOf(false) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { showByokDialog = true },
+                        modifier = Modifier.testTag("byok_settings_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Settings,
+                            contentDescription = "AI key settings",
+                            tint = ClgColors.Cyan
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(ClgColors.Cyan.copy(alpha = 0.15f))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = if (hasRewardedAiCredit) "Active" else "Rewarded Ad",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = ClgColors.Cyan,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+                if (showByokDialog) {
+                    com.example.data.analytics.ByokKeyDialog(
+                        context = context,
+                        onDismiss = { showByokDialog = false }
                     )
                 }
             }
@@ -1951,6 +1972,17 @@ private fun SettingsTabContent(
                 onSelect = setPalette,
                 themeMode = themeMode,
                 onModeChange = onThemeModeChange
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            var uxProfile by remember { mutableStateOf(com.example.ui.ux.UxProfileStore.load(context)) }
+            val haptics = com.example.ui.ux.rememberUxHaptics()
+            com.example.ui.ux.UxProfilePicker(
+                selected = uxProfile,
+                onSelect = { newProfile ->
+                    haptics.tick()
+                    uxProfile = newProfile
+                    com.example.ui.ux.UxProfileStore.save(context, newProfile)
+                }
             )
         }
 
