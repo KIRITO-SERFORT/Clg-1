@@ -66,6 +66,7 @@ class AiAcademicAdvisorService {
 
     // Lazy initialization of Firebase AI Logic model as mandated by guidelines
     private val model by lazy {
+        com.example.util.FirebaseAppCheckLogger.logStatus("AiAcademicAdvisorService.modelInit")
         Firebase.ai.generativeModel(
             modelName = "gemini-3.8-flash",
             generationConfig = generationConfig {

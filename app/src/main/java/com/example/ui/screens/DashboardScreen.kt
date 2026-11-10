@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.core.animateFloat
+
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -1883,15 +1885,65 @@ private fun SettingsTabContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text(
-            text = "Settings",
-            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onSurface,
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .widthIn(max = 600.dp)
-                .padding(start = 4.dp)
-        )
+                .padding(start = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Settings",
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            val glowTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "settings_creator_glow")
+            val glowAlpha by glowTransition.animateFloat(
+                initialValue = 0.25f,
+                targetValue = 0.85f,
+                animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                    animation = tween(durationMillis = 1800, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                    repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+                ),
+                label = "glow_alpha"
+            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f + 0.12f * glowAlpha),
+                                MaterialTheme.colorScheme.secondary.copy(alpha = 0.14f + 0.12f * glowAlpha)
+                            )
+                        )
+                    )
+                    .border(
+                        width = 1.5.dp,
+                        brush = Brush.horizontalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = glowAlpha),
+                                MaterialTheme.colorScheme.secondary.copy(alpha = glowAlpha)
+                            )
+                        ),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .testTag("creator_glow_box")
+            ) {
+                Text(
+                    text = "Made by Arun Sanna .T~mech",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.3.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
 
         // ---------------- Student Profile ----------------
         SettingsSectionLabel("Student Profile")

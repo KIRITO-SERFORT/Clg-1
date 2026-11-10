@@ -90,7 +90,11 @@ fun ChatsScreen(
     batch: String
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val scope = remember {
+        kotlinx.coroutines.CoroutineScope(
+            kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate
+        )
+    }
     val repository = remember { ChatsRepository() }
 
     val tasks by repository.observeChats().collectAsStateWithLifecycle(initialValue = emptyList())

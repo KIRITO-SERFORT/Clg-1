@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // Configure App Check before any UI or Firebase operations
         configureAppCheck(this, intent)
+        com.example.util.FirebaseAppCheckLogger.logStatus("MainActivity.onCreate")
         enableEdgeToEdge()
         setContent {
             val viewModel: AttendanceViewModel = viewModel()

@@ -32,15 +32,13 @@ fun configureAppCheck(context: Context, intent: Intent?) {
                 prefs.edit()
                     .putString(DEBUG_SECRET_KEY, debugToken)
                     .commit()
+                FirebaseAppCheck.getInstance().installAppCheckProviderFactory(
+                    DebugAppCheckProviderFactory.getInstance()
+                )
                 Log.d(TAG, "App Check debug secret configured successfully.")
             } else {
-                Log.w(TAG, "No debug token found in Intent extra.")
+                Log.w(TAG, "No debug token found in Intent extra; skipping DebugAppCheckProviderFactory.")
             }
-
-            FirebaseAppCheck.getInstance().installAppCheckProviderFactory(
-                DebugAppCheckProviderFactory.getInstance()
-            )
-            Log.d(TAG, "DebugAppCheckProviderFactory installed.")
         } else {
             val resId = context.resources.getIdentifier(RECAPTCHA_SITE_KEY_RES, "string", context.packageName)
             if (resId != 0) {
