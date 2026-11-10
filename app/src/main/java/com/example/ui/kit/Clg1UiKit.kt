@@ -480,27 +480,45 @@ data class NavItem(val label: String, val icon: ImageVector)
 /** Floating pill bottom bar: the selected item grows and shows its label. */
 @Composable
 fun ClgBottomBar(items: List<NavItem>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
-    Box(modifier = modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
         Row(
-            modifier = Modifier.clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
                 .border(1.dp, ClgColors.Cyan.copy(alpha = 0.25f), CircleShape)
-                .padding(6.dp).animateContentSize(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 6.dp, vertical = 5.dp)
+                .animateContentSize(),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             items.forEachIndexed { i, item ->
                 val isSel = i == selected
                 val bg by animateColorAsState(if (isSel) ClgColors.Cyan.copy(alpha = 0.18f) else Color.Transparent, tween(250), label = "navBg")
                 val tint by animateColorAsState(if (isSel) ClgColors.Cyan else MaterialTheme.colorScheme.onSurfaceVariant, tween(250), label = "navTint")
                 Row(
-                    modifier = Modifier.clip(CircleShape).background(bg)
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(bg)
                         .semantics { contentDescription = item.label + if (isSel) ", selected" else "" }
-                        .bouncyClick { onSelect(i) }.padding(horizontal = 14.dp, vertical = 10.dp),
+                        .bouncyClick { onSelect(i) }
+                        .padding(horizontal = if (isSel) 12.dp else 9.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(item.icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+                    Icon(item.icon, contentDescription = item.label, tint = tint, modifier = Modifier.size(21.dp))
                     AnimatedVisibility(isSel, enter = fadeIn(tween(200)) + expandHorizontally(), exit = fadeOut(tween(120)) + shrinkHorizontally()) {
-                        Text(item.label, color = tint, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp))
+                        Text(
+                            text = item.label,
+                            color = tint,
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1,
+                            modifier = Modifier.padding(start = 6.dp)
+                        )
                     }
                 }
             }
