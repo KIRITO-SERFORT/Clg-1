@@ -44,6 +44,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Construction
 import androidx.compose.material.icons.filled.ContentCopy
@@ -169,6 +170,7 @@ enum class DashboardTab {
     OVERVIEW,
     SUBJECTS,
     SIMULATOR,
+    CHATS,
     EXAMS,
     SETTINGS
 }
@@ -301,6 +303,7 @@ fun DashboardScreen(
                     NavItem("Overview", Icons.Rounded.Home),
                     NavItem("Subjects", Icons.Rounded.List),
                     NavItem("Analytics", Icons.Default.Insights),
+                    NavItem("Chats", Icons.Default.Campaign),
                     NavItem("Exams", Icons.Rounded.DateRange),
                     NavItem("Settings", Icons.Rounded.Settings)
                 )
@@ -346,6 +349,14 @@ fun DashboardScreen(
                                 targetThreshold = targetThreshold,
                                 studentName = studentName,
                                 collegeName = collegeName
+                            )
+                        }
+
+                        DashboardTab.CHATS -> {
+                            ChatsScreen(
+                                studentName = studentName,
+                                collegeName = collegeName,
+                                batch = batch
                             )
                         }
 

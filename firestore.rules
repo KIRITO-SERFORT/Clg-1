@@ -12,7 +12,7 @@ service cloud.firestore {
 
     function isValidUserProfile(data, userId) {
       return data.keys().hasAll(['userId', 'name', 'collegeName', 'batch', 'isPlus', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['userId', 'name', 'collegeName', 'batch', 'isPlus', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'name', 'collegeName', 'batch', 'isPlus', 'role', 'fcmToken', 'createdAt', 'updatedAt'])
         && data.userId == userId
         && data.name is string && data.name.size() > 0 && data.name.size() <= 100
         && data.collegeName is string && data.collegeName.size() > 0 && data.collegeName.size() <= 150
@@ -20,6 +20,12 @@ service cloud.firestore {
         && data.isPlus is bool
         && data.createdAt is timestamp && data.createdAt <= request.time
         && data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isOfficialRepresentative() {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Class Rep', 'Club Leader']);
     }
 
     function isValidAcademicRecord(data, userId) {
@@ -54,6 +60,18 @@ service cloud.firestore {
                       && request.resource.data.createdAt == resource.data.createdAt;
         allow delete: if isOwner(userId);
       }
+    }
+
+    match /chats/{taskId} {
+      // Allow any authenticated member to read priority chats
+      allow read: if isAuthenticated();
+
+      // Only official representatives (Class Rep, Club Leader) can create or delete tasks
+      allow create, delete: if isOfficialRepresentative();
+
+      // Representatives can update any field; students can toggle their own completion status
+      allow update: if isOfficialRepresentative()
+        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completions']));
     }
   }
 }
