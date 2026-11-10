@@ -53,6 +53,8 @@ class MainActivity : ComponentActivity() {
             ClgTheme(darkTheme = isDark) {
                 val uiState by viewModel.uiState.collectAsStateWithLifecycle()
                 val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+                val absentDays by viewModel.absentDays.collectAsStateWithLifecycle()
+                val isLoadingAbsentDays by viewModel.isLoadingAbsentDays.collectAsStateWithLifecycle()
                 val snackbarHostState = remember { SnackbarHostState() }
                 var showLoading by remember { mutableStateOf(true) }
 
@@ -135,6 +137,9 @@ class MainActivity : ComponentActivity() {
                                         themeMode = state.themeMode,
                                         notificationsEnabled = state.notificationsEnabled,
                                         isRefreshing = state.isRefreshing || isLoading,
+                                        absentDays = absentDays,
+                                        isLoadingAbsentDays = isLoadingAbsentDays,
+                                        onLoadAbsentDays = { viewModel.loadAbsentDays() },
                                         onRefreshClick = { viewModel.refresh(isBackground = false) },
                                         onThresholdChange = { viewModel.setTargetThreshold(it) },
                                         onThemeModeChange = { viewModel.setThemeMode(it) },

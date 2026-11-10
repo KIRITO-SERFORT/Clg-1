@@ -188,6 +188,9 @@ fun DashboardScreen(
     themeMode: ThemeMode,
     notificationsEnabled: Boolean,
     isRefreshing: Boolean,
+    absentDays: List<com.example.data.model.AbsentDayRecord> = emptyList(),
+    isLoadingAbsentDays: Boolean = false,
+    onLoadAbsentDays: () -> Unit = {},
     onRefreshClick: () -> Unit,
     onThresholdChange: (Double) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
@@ -330,6 +333,9 @@ fun DashboardScreen(
                                 summary = summary,
                                 subjects = subjects,
                                 targetThreshold = targetThreshold,
+                                absentDays = absentDays,
+                                isLoadingAbsentDays = isLoadingAbsentDays,
+                                onLoadAbsentDays = onLoadAbsentDays,
                                 onThresholdChange = onThresholdChange,
                                 onNavigateToExams = { selectedTab = DashboardTab.EXAMS }
                             )
@@ -396,6 +402,9 @@ private fun OverviewTabContent(
     summary: AttendanceSummary,
     subjects: List<SubjectAttendance>,
     targetThreshold: Double,
+    absentDays: List<com.example.data.model.AbsentDayRecord> = emptyList(),
+    isLoadingAbsentDays: Boolean = false,
+    onLoadAbsentDays: () -> Unit = {},
     onThresholdChange: (Double) -> Unit,
     onNavigateToExams: () -> Unit = {}
 ) {
@@ -776,7 +785,30 @@ private fun OverviewTabContent(
 
                 StatRow(label = "Hours Present", value = "${summary.present} hrs", valueColor = StatusSafe)
                 StatDivider()
-                StatRow(label = "Hours Absent", value = "${summary.absent} hrs", valueColor = StatusDanger)
+                var showAbsentDialog by remember { mutableStateOf(false) }
+                if (showAbsentDialog) {
+                    AbsentDaysDetailsDialog(
+                        absentDays = absentDays,
+                        isLoading = isLoadingAbsentDays,
+                        onDismiss = { showAbsentDialog = false }
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            onLoadAbsentDays()
+                            showAbsentDialog = true
+                        }
+                        .testTag("hours_absent_row")
+                ) {
+                    StatRow(
+                        label = "Hours Absent (Tap for details)",
+                        value = "${summary.absent} hrs",
+                        valueColor = StatusDanger
+                    )
+                }
                 StatDivider()
                 StatRow(label = "Total Hours Marked", value = "${summary.marked} hrs")
                 StatDivider()
@@ -2653,6 +2685,97 @@ private fun PaymentCheckDialog(onDismiss: () -> Unit) {
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("No / not sure") }
+        }
+    )
+}
+
+@Composable
+private fun AbsentDaysDetailsDialog(
+    absentDays: List<com.example.data.model.AbsentDayRecord>,
+    isLoading: Boolean,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Absent Days Details",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+            )
+        },
+        text = {
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = ClgColors.Cyan)
+                }
+            } else if (absentDays.isEmpty()) {
+                Text(
+                    text = "No absent hours recorded from ERP.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    absentDays.forEach { day ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = day.formattedDate,
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = StatusDanger
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                day.sessions.forEach { s ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                            Text(
+                                                text = "${s.courseTitle} - ${s.courseCode}",
+                                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = s.timeRange,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Text(
+                                            text = s.session,
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = ClgColors.Cyan
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
         }
     )
 }

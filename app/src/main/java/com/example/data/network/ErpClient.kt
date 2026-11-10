@@ -1,5 +1,6 @@
 package com.example.data.network
 
+import com.example.data.model.AbsentDayRecord
 import com.example.data.model.AttendanceSummary
 import com.example.data.model.SubjectAttendance
 import com.example.data.model.Timetable
@@ -11,6 +12,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import java.io.IOException
@@ -72,6 +74,17 @@ class ErpClient : ErpConnector {
     fun fetchAttendance(username: String, password: String): AttendanceSummary {
         val result = fetchFullAttendance(username, password)
         return result.summary
+    }
+
+    /** Fetches detailed absent days and sessions from /student/attendance/absent/<rollNo>. */
+    fun fetchAbsentDays(username: String, password: String): List<AbsentDayRecord> {
+        val cleanUser = username.trim()
+        val tokens = login(cleanUser, password)
+        return try {
+            getAbsentDetails(cleanUser, tokens.accessToken)
+        } finally {
+            runCatching { logout(tokens.refreshToken) }
+        }
     }
 
     /** Fetches both overall college totals and detailed subject-wise records. */
@@ -245,6 +258,25 @@ class ErpClient : ErpConnector {
             }
         } catch (_: Exception) {
             Pair(emptyList(), "")
+        }
+    }
+
+    private fun getAbsentDetails(username: String, accessToken: String): List<AbsentDayRecord> {
+        val request = Request.Builder()
+            .url("$PORTAL/student/attendance/absent/$username")
+            .header("Authorization", "Bearer $accessToken")
+            .header("Accept", "application/json, text/plain, */*")
+            .build()
+
+        return try {
+            http.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return emptyList()
+                val bodyText = resp.body?.string().orEmpty().trim()
+                if (!bodyText.startsWith("[")) return emptyList()
+                AbsentDayRecord.fromJsonArray(JSONArray(bodyText))
+            }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 

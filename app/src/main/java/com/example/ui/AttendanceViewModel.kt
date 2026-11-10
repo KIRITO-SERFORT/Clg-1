@@ -55,6 +55,12 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _absentDays = MutableStateFlow<List<com.example.data.model.AbsentDayRecord>>(emptyList())
+    val absentDays: StateFlow<List<com.example.data.model.AbsentDayRecord>> = _absentDays.asStateFlow()
+
+    private val _isLoadingAbsentDays = MutableStateFlow(false)
+    val isLoadingAbsentDays: StateFlow<Boolean> = _isLoadingAbsentDays.asStateFlow()
+
     val themeModeFlow = repository.themeModeFlow
 
     init {
@@ -210,6 +216,19 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                 }
             } catch (e: Exception) {
                 android.util.Log.w("AttendanceVM", "Google auth sync handling: ${e.message}")
+            }
+        }
+    }
+
+    fun loadAbsentDays() {
+        viewModelScope.launch {
+            _isLoadingAbsentDays.value = true
+            try {
+                _absentDays.value = repository.fetchAbsentDays()
+            } catch (e: Exception) {
+                _errorMessage.emit("Could not load absent details: ${e.message}")
+            } finally {
+                _isLoadingAbsentDays.value = false
             }
         }
     }

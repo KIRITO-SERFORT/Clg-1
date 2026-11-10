@@ -104,6 +104,12 @@ class AttendanceRepository(private val context: Context) {
         result
     }
 
+    suspend fun fetchAbsentDays(): List<com.example.data.model.AbsentDayRecord> = withContext(Dispatchers.IO) {
+        val creds = prefs.getCredentials() ?: return@withContext emptyList()
+        if (creds.second == "direct_access_pass") return@withContext emptyList()
+        com.example.data.network.ErpClient().fetchAbsentDays(creds.first, creds.second)
+    }
+
     suspend fun enterDirectMode(name: String, college: String, batch: String) {
         val emptySummary = AttendanceSummary(
             present = 0,
