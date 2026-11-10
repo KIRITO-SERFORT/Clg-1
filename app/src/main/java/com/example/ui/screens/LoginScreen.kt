@@ -1,7 +1,11 @@
 package com.example.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
@@ -26,6 +30,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
@@ -241,6 +246,142 @@ fun LoginScreen(
                                 .fillMaxWidth()
                                 .testTag("password_input")
                         )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Select your college dropdown
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        val collegeOptions = listOf(
+                            "Alagappa Chettiar Govt. College of Engineering and Technology",
+                            "Can't find my college"
+                        )
+                        var selectedCollege by remember { mutableStateOf(collegeOptions.first()) }
+                        var collegeDropdownExpanded by remember { mutableStateOf(false) }
+                        var showRequestCollegeDialog by remember { mutableStateOf(false) }
+
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = selectedCollege,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Select your college") },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.ArrowDropDown,
+                                        contentDescription = "Select college"
+                                    )
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("college_dropdown")
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clickable { collegeDropdownExpanded = true }
+                            )
+                            androidx.compose.material3.DropdownMenu(
+                                expanded = collegeDropdownExpanded,
+                                onDismissRequest = { collegeDropdownExpanded = false }
+                            ) {
+                                collegeOptions.forEach { option ->
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text(option) },
+                                        onClick = {
+                                            collegeDropdownExpanded = false
+                                            if (option == "Can't find my college") {
+                                                showRequestCollegeDialog = true
+                                            } else {
+                                                selectedCollege = option
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        if (showRequestCollegeDialog) {
+                            var reqUsername by remember { mutableStateOf(username) }
+                            var reqCollege by remember { mutableStateOf("") }
+                            var reqNote by remember { mutableStateOf("") }
+
+                            androidx.compose.material3.AlertDialog(
+                                onDismissRequest = { showRequestCollegeDialog = false },
+                                title = { Text("Request to Add Your College") },
+                                text = {
+                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Text(
+                                            text = "Notice: You can continue using Clg 1% without your college's ERP portal via Direct Workspace.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        OutlinedTextField(
+                                            value = reqUsername,
+                                            onValueChange = { reqUsername = it },
+                                            label = { Text("Username / Register No.") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        OutlinedTextField(
+                                            value = reqCollege,
+                                            onValueChange = { reqCollege = it },
+                                            label = { Text("Your College Name") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        OutlinedTextField(
+                                            value = reqNote,
+                                            onValueChange = { reqNote = it },
+                                            label = { Text("Note & Request to Add College") },
+                                            placeholder = { Text("Type your note and ERP portal details...") },
+                                            minLines = 3,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                },
+                                confirmButton = {
+                                    Button(
+                                        onClick = {
+                                            val body = buildString {
+                                                appendLine("Request to Add College to Clg 1%")
+                                                appendLine("Username: $reqUsername")
+                                                appendLine("College: $reqCollege")
+                                                appendLine()
+                                                appendLine("Note:")
+                                                appendLine(reqNote)
+                                            }
+                                            val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                                data = Uri.parse("mailto:arunsanna071@gmail.com")
+                                                putExtra(Intent.EXTRA_EMAIL, arrayOf("arunsanna071@gmail.com"))
+                                                putExtra(Intent.EXTRA_SUBJECT, "Clg 1% - Request to Add College: $reqCollege")
+                                                putExtra(Intent.EXTRA_TEXT, body)
+                                            }
+                                            try {
+                                                context.startActivity(Intent.createChooser(intent, "Send request email"))
+                                                showRequestCollegeDialog = false
+                                            } catch (_: Exception) {
+                                                Toast.makeText(
+                                                    context,
+                                                    "No email app found. Please email arunsanna071@gmail.com",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }
+                                        },
+                                        enabled = reqCollege.isNotBlank()
+                                    ) {
+                                        Text("Send")
+                                    }
+                                },
+                                dismissButton = {
+                                    androidx.compose.material3.TextButton(
+                                        onClick = { showRequestCollegeDialog = false }
+                                    ) {
+                                        Text("Cancel")
+                                    }
+                                }
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(24.dp))
 
