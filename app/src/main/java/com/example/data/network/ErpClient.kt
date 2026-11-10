@@ -226,7 +226,7 @@ class ErpClient : ErpConnector {
                 marked = j.optInt("enteredTillDate", 0),
                 notMarked = j.optInt("notEnteredTillDate", 0),
                 totalWorking = j.optInt("totalworkingTillDate", 0),
-                apiPercentage = j.optInt("netPresentPercentageTillDate", 0),
+                apiPercentage = Math.round(j.optDouble("netPresentPercentageTillDate", 0.0)).toInt(),
                 tillDate = j.optString("tillDate", ""),
                 lastSyncedMillis = System.currentTimeMillis()
             )

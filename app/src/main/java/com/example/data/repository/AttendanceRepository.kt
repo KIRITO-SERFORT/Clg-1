@@ -70,7 +70,7 @@ class AttendanceRepository(private val context: Context) {
             val result = ErpConnectors.create().fetchFullAttendance(username, password)
             prefs.saveCredentials(username, password)
             prefs.saveCachedAttendance(result.summary)
-            prefs.saveCachedSubjects(result.subjects)
+            if (result.subjects.isNotEmpty()) prefs.saveCachedSubjects(result.subjects)
             if (result.studentName.isNotBlank()) {
                 prefs.saveStudentName(result.studentName)
             }
@@ -90,7 +90,7 @@ class AttendanceRepository(private val context: Context) {
             ?: throw IllegalStateException("Not logged in. Please sign in to fetch attendance.")
         val result = ErpConnectors.create().fetchFullAttendance(creds.first, creds.second)
         prefs.saveCachedAttendance(result.summary)
-        prefs.saveCachedSubjects(result.subjects)
+        if (result.subjects.isNotEmpty()) prefs.saveCachedSubjects(result.subjects)
         if (result.studentName.isNotBlank()) {
             prefs.saveStudentName(result.studentName)
         }

@@ -90,6 +90,7 @@ class UserPreferences(private val context: Context) {
         when (prefs[KEY_THEME_MODE]) {
             "LIGHT" -> ThemeMode.LIGHT
             "DARK" -> ThemeMode.DARK
+            "SYSTEM" -> ThemeMode.SYSTEM
             else -> ThemeMode.DARK
         }
     }

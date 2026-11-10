@@ -28,11 +28,12 @@ class AttendanceSyncWorker(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val prefs = UserPreferences(applicationContext)
         val creds = prefs.getCredentials() ?: return@withContext Result.success()
+        if (creds.second == "direct_access_pass") return@withContext Result.success()
 
         try {
             val result = ErpConnectors.create().fetchFullAttendance(creds.first, creds.second)
             prefs.saveCachedAttendance(result.summary)
-            prefs.saveCachedSubjects(result.subjects)
+            if (result.subjects.isNotEmpty()) prefs.saveCachedSubjects(result.subjects)
             if (result.studentName.isNotBlank()) {
                 prefs.saveStudentName(result.studentName)
             }

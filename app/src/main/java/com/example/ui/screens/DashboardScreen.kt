@@ -1458,7 +1458,7 @@ private fun AnalyticsAndSimulatorTabContent(
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = "$remainingToday/2 Left",
+                            text = "Remaining Daily Requests: $remainingToday/2",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = ClgColors.Cyan,
                             maxLines = 1,

@@ -123,8 +123,9 @@ class ByokAdvisorClient(
             .put("contents", JSONArray().put(JSONObject().put(
                 "parts", JSONArray().put(JSONObject().put("text", prompt))
             )))
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$apiKey"
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
         return Request.Builder().url(url)
+            .header("x-goog-api-key", apiKey)
             .post(json.toString().toRequestBody(JSON))
             .build()
     }
