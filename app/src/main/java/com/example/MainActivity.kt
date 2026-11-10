@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
             }
 
             ClgTheme(darkTheme = isDark) {
+                com.example.ui.components.AppUpdateChecker()
                 val uiState by viewModel.uiState.collectAsStateWithLifecycle()
                 val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
                 val absentDays by viewModel.absentDays.collectAsStateWithLifecycle()

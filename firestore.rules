@@ -72,6 +72,9 @@ service cloud.firestore {
       // Representatives can update any field; students can toggle their own completion status
       allow update: if isOfficialRepresentative()
         || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completions']));
+    match /app_config/{docId} {
+      allow read: if true;
+      allow write: if false;
     }
   }
 }

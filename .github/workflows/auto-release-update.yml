@@ -1,0 +1,119 @@
+name: Auto Release & Notify Users
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_code:
+        description: 'Version Code (e.g. 2)'
+        required: true
+        type: string
+      version_name:
+        description: 'Version Name (e.g. 1.1.0)'
+        required: true
+        type: string
+      release_notes:
+        description: 'Release Notes'
+        required: false
+        default: 'Bug fixes and improvements.'
+        type: string
+      force_update:
+        description: 'Force Update?'
+        required: false
+        default: 'false'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Determine release metadata
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="v${{ inputs.version_name }}"
+            VERSION_CODE="${{ inputs.version_code }}"
+            VERSION_NAME="${{ inputs.version_name }}"
+            NOTES="${{ inputs.release_notes }}"
+            FORCE="${{ inputs.force_update }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION_NAME="${TAG#v}"
+            VERSION_CODE=$(grep -oP 'versionCode\s*=\s*\K\d+' app/build.gradle.kts || echo "2")
+            NOTES="New release $TAG"
+            FORCE="false"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "notes=$NOTES" >> $GITHUB_OUTPUT
+          echo "force=$FORCE" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release & Upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: "Clg 1% ${{ steps.meta.outputs.tag }}"
+          body: ${{ steps.meta.outputs.notes }}
+          files: app/build/outputs/apk/debug/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Firestore latest_release
+        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Push version info to Firestore
+        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          APK_URL: "https://github.com/${{ github.repository }}/releases/download/${{ steps.meta.outputs.tag }}/app-debug.apk"
+          VERSION_CODE: ${{ steps.meta.outputs.version_code }}
+          VERSION_NAME: ${{ steps.meta.outputs.version_name }}
+          RELEASE_NOTES: ${{ steps.meta.outputs.notes }}
+          FORCE_UPDATE: ${{ steps.meta.outputs.force }}
+        run: |
+          npm install firebase-admin --no-save
+          node -e '
+            const admin = require("firebase-admin");
+            const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+            admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+            const db = admin.firestore();
+            db.collection("app_config").doc("latest_release").set({
+              latestVersionCode: Number(process.env.VERSION_CODE),
+              latestVersionName: process.env.VERSION_NAME,
+              apkUrl: process.env.APK_URL,
+              releaseNotes: process.env.RELEASE_NOTES,
+              forceUpdate: process.env.FORCE_UPDATE === "true",
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }).then(() => {
+              console.log("Updated app_config/latest_release successfully.");
+              process.exit(0);
+            }).catch((err) => {
+              console.error(err);
+              process.exit(1);
+            });
+          '
