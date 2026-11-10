@@ -1769,6 +1769,7 @@ private fun SettingsTabContent(
     val context = LocalContext.current
     var showContactDialog by remember { mutableStateOf(false) }
     var showTeaDialog by remember { mutableStateOf(false) }
+    var showUpiPayDialog by remember { mutableStateOf(false) }
     var awaitingUpiReturn by remember { mutableStateOf(false) }
     var showThanksDialog by remember { mutableStateOf(false) }
     var batteryUnrestricted by remember { mutableStateOf(DeviceSetup.isBatteryUnrestricted(context)) }
@@ -1798,6 +1799,10 @@ private fun SettingsTabContent(
             onDismiss = { showTeaDialog = false },
             onPaymentLaunched = { awaitingUpiReturn = true }
         )
+    }
+
+    if (showUpiPayDialog) {
+        UpiPayDialog(onDismiss = { showUpiPayDialog = false })
     }
 
     if (showThanksDialog) {
@@ -2216,7 +2221,7 @@ private fun SettingsTabContent(
 
                 Button(
                     onClick = {
-                        startContributionPayment(context)
+                        showUpiPayDialog = true
                     },
                     modifier = Modifier.testTag("contribute_yes_button"),
                     shape = RoundedCornerShape(12.dp),
@@ -2444,9 +2449,13 @@ private fun ContactDialog(onDismiss: () -> Unit) {
                             modifier = Modifier.weight(1f).padding(end = 8.dp)
                         )
 
+                        var showDialogUpi by remember { mutableStateOf(false) }
+                        if (showDialogUpi) {
+                            UpiPayDialog(onDismiss = { showDialogUpi = false })
+                        }
                         Button(
                             onClick = {
-                                startContributionPayment(context)
+                                showDialogUpi = true
                             },
                             modifier = Modifier.testTag("contact_contribute_yes_button"),
                             shape = RoundedCornerShape(10.dp),
@@ -2771,6 +2780,126 @@ private fun AbsentDaysDetailsDialog(
                             }
                         }
                     }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
+}
+
+private fun openPaymentAppHomeScreen(context: Context) {
+    val pm = context.packageManager
+    val knownPackages = listOf(
+        "com.google.android.apps.nbu.paisa.user", // Google Pay
+        "com.phonepe.app",                        // PhonePe
+        "com.fampay.in",                          // FamPay
+        "net.one97.paytm",                        // Paytm
+        "in.org.npci.upiapp",                     // BHIM
+        "in.amazon.mShop.android.shopping"        // Amazon Pay
+    )
+    val launchIntents = knownPackages.mapNotNull { pkg ->
+        pm.getLaunchIntentForPackage(pkg)
+    }
+
+    when {
+        launchIntents.size == 1 -> {
+            context.startActivity(launchIntents.first())
+        }
+        launchIntents.size > 1 -> {
+            val chooser = Intent.createChooser(launchIntents.first(), "Open Payment App")
+            chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, launchIntents.drop(1).toTypedArray())
+            context.startActivity(chooser)
+        }
+        else -> {
+            // Fallback to any UPI handler
+            val upiIntent = Intent(Intent.ACTION_VIEW, Uri.parse("upi://pay?pa=$UPI_ID&cu=INR"))
+            if (pm.queryIntentActivities(upiIntent, 0).isNotEmpty()) {
+                context.startActivity(Intent.createChooser(upiIntent, "Open Payment App"))
+            } else {
+                Toast.makeText(
+                    context,
+                    "No payment app found. Please paste $UPI_ID in your UPI app.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpiPayDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Support Clg 1%",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Copy the UPI ID below, then open your payment app (GPay, PhonePe, FamPay, etc.) to send your contribution manually.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .border(1.dp, ClgColors.Cyan.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = UPI_ID,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = ClgColors.Cyan
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        clipboard.setText(AnnotatedString(UPI_ID))
+                        Toast.makeText(context, "UPI ID copied: $UPI_ID", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("copy_upi_id_button"),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Copy UPI ID")
+                }
+
+                Button(
+                    onClick = {
+                        openPaymentAppHomeScreen(context)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("go_to_payment_app_button"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ClgColors.Cyan,
+                        contentColor = ClgColors.Navy
+                    )
+                ) {
+                    Text(
+                        text = "Go to Payment App",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                    )
                 }
             }
         },

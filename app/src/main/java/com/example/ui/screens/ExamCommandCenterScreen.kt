@@ -773,7 +773,7 @@ fun ExamCommandCenterScreen() {
             }
 
             Spacer(Modifier.height(14.dp))
-            PlayBillingCard()
+
             if (message.isNotBlank()) Text(message)
         }
         item { Spacer(Modifier.height(20.dp)) }
