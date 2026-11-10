@@ -49,6 +49,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 object GoogleAuthHelper {
 
     fun onGoogleSignInClicked(
@@ -77,7 +83,11 @@ object GoogleAuthHelper {
 
         scope.launch {
             try {
-                val result = credentialManager.getCredential(context as Activity, request)
+                val activity = context.findActivity() ?: run {
+                    onAuthError("Unable to start Google Sign-In from this screen.")
+                    return@launch
+                }
+                val result = credentialManager.getCredential(activity, request)
                 val credential = result.credential
                 if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                     val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken

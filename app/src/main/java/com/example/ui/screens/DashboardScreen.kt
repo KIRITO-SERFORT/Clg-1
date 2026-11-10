@@ -2217,6 +2217,8 @@ private fun SettingsTabContent(
                     modifier = Modifier.size(30.dp)
                 )
             }
+            var showIkegaiDialog by remember { mutableStateOf(false) }
+
             Image(
                 painter = painterResource(id = R.drawable.ikegai_telos_logo),
                 contentDescription = "Ikegai Telos website",
@@ -2225,8 +2227,54 @@ private fun SettingsTabContent(
                     .size(48.dp)
                     .clip(CircleShape)
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-                    .clickable { openIkegaiWebsite(context) }
+                    .clickable { showIkegaiDialog = true }
             )
+
+            if (showIkegaiDialog) {
+                AlertDialog(
+                    onDismissRequest = { showIkegaiDialog = false },
+                    title = {
+                        Text(
+                            text = "Ikegai Telos",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+                    },
+                    text = {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Text(
+                                text = "Interested in any projects or have any ideas or like to work as a group? Check out our students created and managed organization.",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Button(
+                                onClick = {
+                                    showIkegaiDialog = false
+                                    openIkegaiWebsite(context)
+                                },
+                                modifier = Modifier.testTag("ikegai_visit_button")
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.ikegai_telos_logo),
+                                    contentDescription = "Ikegai Telos logo",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Visit Ikegai Telos")
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showIkegaiDialog = false }) {
+                            Text("Close")
+                        }
+                    }
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(14.dp))

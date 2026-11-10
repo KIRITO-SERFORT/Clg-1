@@ -39,6 +39,21 @@ class ChatsRepository {
     }
 
     /**
+     * Updates the current user's role in Firestore (/users/{uid}.role) so no manual Console edit is needed.
+     */
+    suspend fun setCurrentUserRole(role: String): Result<Unit> {
+        val uid = currentUserId() ?: return Result.failure(IllegalStateException("Not signed in"))
+        return try {
+            usersCollection.document(uid)
+                .update(mapOf("role" to role, "updatedAt" to FieldValue.serverTimestamp()))
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Real-time stream of official CHATS tasks/announcements ordered by deadline.
      */
     fun observeChats(): Flow<List<ChatTask>> = callbackFlow {

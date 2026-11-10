@@ -434,9 +434,11 @@ fun LoginScreen(
                         Spacer(modifier = Modifier.height(14.dp))
 
                         com.example.util.GoogleSignInButton(
-                            label = "Sign in with Google Cloud",
+                            label = "Sign in with Google (Optional)",
                             onAuthSuccess = onGoogleAuthSuccess,
-                            onAuthError = { /* non-fatal, logged */ }
+                            onAuthError = { err ->
+                                Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+                            }
                         )
                     }
                 }

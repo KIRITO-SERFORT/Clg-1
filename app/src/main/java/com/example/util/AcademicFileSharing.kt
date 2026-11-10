@@ -37,4 +37,31 @@ object AcademicFileSharing {
         }
         context.startActivity(Intent.createChooser(intent, chooserTitle).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
+
+    fun saveTextFileToDownloads(context: Context, fileName: String, mimeType: String, content: String): Result<String> = runCatching {
+        require(fileName.matches(Regex("[A-Za-z0-9._-]{1,100}"))) { "Invalid export filename" }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Downloads.DISPLAY_NAME, fileName)
+                put(android.provider.MediaStore.Downloads.MIME_TYPE, mimeType)
+                put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: error("Unable to create file in Downloads")
+            resolver.openOutputStream(uri)?.use { it.write(content.toByteArray(Charsets.UTF_8)) }
+                ?: error("Unable to write to Downloads")
+            values.clear()
+            values.put(android.provider.MediaStore.Downloads.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+            "Saved $fileName to Downloads"
+        } else {
+            @Suppress("DEPRECATION")
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            downloadsDir.mkdirs()
+            val outFile = File(downloadsDir, fileName)
+            outFile.writeText(content, Charsets.UTF_8)
+            "Saved $fileName to Downloads"
+        }
+    }
 }

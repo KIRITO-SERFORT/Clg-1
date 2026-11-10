@@ -1020,6 +1020,12 @@ fun ExamCommandCenterScreen() {
                         .onFailure { message = "CSV export failed: ${it.message}" }
                     pendingCsv = null
                 }) { Text("Share CSV manually") }
+                TextButton(onClick = {
+                    AcademicFileSharing.saveTextFileToDownloads(context, "clg1-academic-export.csv", "text/csv", csv)
+                        .onSuccess { message = it }
+                        .onFailure { message = "Download failed: ${it.message}" }
+                    pendingCsv = null
+                }) { Text("Download CSV") }
             } },
             dismissButton = { TextButton(onClick = { pendingCsv = null }) { Text("Cancel") } }
         )
@@ -1179,6 +1185,11 @@ fun ExamCommandCenterScreen() {
                                             AcademicFileSharing.shareTextFile(context, "clg1-template.clg1template", "application/json", saved.templateJson, "Share saved template")
                                         }) { Text("Share") }
                                         TextButton(onClick = {
+                                            AcademicFileSharing.saveTextFileToDownloads(context, "clg1-template.clg1template", "application/json", saved.templateJson)
+                                                .onSuccess { message = it }
+                                                .onFailure { message = "Download failed: ${it.message}" }
+                                        }) { Text("Download") }
+                                        TextButton(onClick = {
                                             TemplateLibrary.deleteSavedTemplate(context, saved.id)
                                             localTemplates = TemplateLibrary.getSavedLocalTemplates(context)
                                         }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
@@ -1217,6 +1228,18 @@ fun ExamCommandCenterScreen() {
                                             AcademicFileSharing.shareTextFile(context, "community-template.clg1template", "application/json", json, "Share community template")
                                         }.onFailure { message = "Share failed: ${it.message}" }
                                     }) { Text("Share") }
+                                    TextButton(onClick = {
+                                        runCatching {
+                                            val json = AcademicTemplateCodec.export(
+                                                template.college, template.program, template.department,
+                                                template.regulation, template.academicYear, template.termName,
+                                                template.rules, TemplateLibrary.createSubjectsFromTemplate(template)
+                                            )
+                                            AcademicFileSharing.saveTextFileToDownloads(context, "community-template.clg1template", "application/json", json)
+                                                .onSuccess { message = it }
+                                                .onFailure { message = "Download failed: ${it.message}" }
+                                        }.onFailure { message = "Download failed: ${it.message}" }
+                                    }) { Text("Download") }
                                 }
                             }
                         }

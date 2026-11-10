@@ -97,6 +97,7 @@ fun ChatsScreen(
     val currentUserId = repository.currentUserId().orEmpty()
     var userRole by remember { mutableStateOf("Student") }
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showRoleDialog by remember { mutableStateOf(false) }
     var reminderTargetTask by remember { mutableStateOf<ChatTask?>(null) }
 
     // Live ticker for HIGH priority countdown timers
@@ -129,6 +130,46 @@ fun ChatsScreen(
     }
 
     val isOfficialRep = userRole == "Class Rep" || userRole == "Club Leader"
+
+    if (showRoleDialog) {
+        AlertDialog(
+            onDismissRequest = { showRoleDialog = false },
+            title = { Text("Select Your Role") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("Student", "Class Rep", "Club Leader").forEach { roleOption ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    scope.launch {
+                                        repository.setCurrentUserRole(roleOption).onSuccess {
+                                            userRole = roleOption
+                                            showRoleDialog = false
+                                            Toast.makeText(context, "Role updated to $roleOption", Toast.LENGTH_SHORT).show()
+                                        }.onFailure {
+                                            Toast.makeText(context, it.message ?: "Failed to update role", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            androidx.compose.material3.RadioButton(selected = userRole == roleOption, onClick = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(roleOption, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showRoleDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -186,6 +227,7 @@ fun ChatsScreen(
                                     if (isOfficialRep) ClgColors.Cyan.copy(alpha = 0.2f)
                                     else Color.White.copy(alpha = 0.08f)
                                 )
+                                .clickable(enabled = currentUserId.isNotBlank()) { showRoleDialog = true }
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
                             Text(
