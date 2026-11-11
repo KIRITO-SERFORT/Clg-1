@@ -109,12 +109,13 @@ jobs:
         run: |
           npm install firebase-admin --no-save
           node -e '
-            const admin = require("firebase-admin");
-            const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-            console.log("Using Firebase project_id:", serviceAccount.project_id);
-            admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-            const db = admin.firestore();
-            db.collection("app_config").doc("latest_release").set({
+          const admin = require("firebase-admin");
+          const { getFirestore } = require("firebase-admin/firestore");
+          const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+          console.log("Using Firebase project_id:", serviceAccount.project_id);
+          admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+          const db = getFirestore("ai-studio-android-clg1-c3e120b1-448b-44b7-96ec-4127b50bcb87");
+              db.collection("app_config").doc("latest_release").set({
               latestVersionCode: Number(process.env.VERSION_CODE),
               latestVersionName: process.env.VERSION_NAME,
               apkUrl: process.env.APK_URL,
